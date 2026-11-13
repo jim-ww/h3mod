@@ -40,6 +40,9 @@ Config is `h3mod.json` in the current directory (`-config` to change):
 
 `<mod>` is a folder name or a mod ID.
 
+Before each deploy the load order is sorted by the mods' `loadBefore` and
+`loadAfter` rules, keeping the current order where the rules allow, and saved.
+
 Option selections are saved with the mod version and the options the mod had.
 When a mod updates, removed options are dropped, new ones get their defaults,
 and empty choice groups fall back to theirs; each change is reported.
@@ -47,7 +50,8 @@ and empty choice groups fall back to theirs; each change is reported.
 ## Supported
 
 - framework mods: content folders, checkbox and select options, conditional
-  options, requirements and incompatibilities
+  options, requirements, incompatibilities, supported platforms and load
+  order rules
 - raw files with `.meta` or `.meta.json`, rpkg mods
 - `repository.json`, `entity.json`, `entity.patch.json`, `material.json`,
   `texture.tga`, `.delta`, `sfx.wem`
