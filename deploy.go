@@ -185,6 +185,13 @@ func (d *Deployer) Deploy(ctx context.Context, skipUnsupported bool, out string)
 			return err
 		}
 	}
+	summary := summaryPath(d.cfg)
+	if out != "" {
+		summary = filepath.Join(out, "deploySummary.json")
+	}
+	if err := writeDeploySummary(d.cfg, p, summary); err != nil {
+		return fmt.Errorf("deploy summary for Peacock: %w", err)
+	}
 	if out == "" {
 		state.Deployed, state.Mods, state.Archives = time.Now(), slices.Clone(d.cfg.Enabled), next
 		if err := state.save(d.statePath()); err != nil {
@@ -393,6 +400,9 @@ func (d *Deployer) Undeploy() error {
 		return err
 	}
 	if err := restoreThumbs(d.cfg); err != nil {
+		return err
+	}
+	if err := removeDeploySummary(summaryPath(d.cfg)); err != nil {
 		return err
 	}
 	if err := (&State{}).save(d.statePath()); err != nil {

@@ -2,8 +2,10 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -23,7 +25,7 @@ func TestDeployJSONEdits(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write("manifest.json", `{"id":"Test.Mod","name":"Test","version":"1","contentFolders":["content"],"blobsFolders":["blobs"]}`)
+	write("manifest.json", `{"id":"Test.Mod","name":"Test","version":"1","contentFolders":["content"],"blobsFolders":["blobs"],"peacockPlugins":["plugin.js"]}`)
 	write("blobs/images/Test.png", "not really a png")
 	write("content/chunk0/a.unlockables.json", `{"TEST_UNLOCKABLE":{"Type":"gear","Subtype":"test"}}`)
 	write("content/chunk0/b.contract.json", `{"Metadata":{"Id":"11111111-2222-3333-4444-555555555555","Title":"Test"}}`)
@@ -89,5 +91,35 @@ func TestDeployJSONEdits(t *testing.T) {
 	}
 	if last := blobs[len(blobs)-1]; last.hash != bh || last.id != "images/test.png" {
 		t.Errorf("blob not registered: %+v", last)
+	}
+
+	// what Peacock reads
+	sb, err := os.ReadFile(filepath.Join(out, "deploySummary.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sum struct {
+		LoadOrder            []string
+		LastServerSideStates struct {
+			Unlockables    []map[string]any
+			Contracts      map[string]struct{ Metadata struct{ Title string } }
+			PeacockPlugins []string
+		}
+	}
+	if err := json.Unmarshal(sb, &sum); err != nil {
+		t.Fatal(err)
+	}
+	st := sum.LastServerSideStates
+	if len(sum.LoadOrder) != 1 || sum.LoadOrder[0] != "Test.Mod" {
+		t.Errorf("load order %v", sum.LoadOrder)
+	}
+	if len(st.Unlockables) < 100 || st.Unlockables[len(st.Unlockables)-1]["Id"] != "TEST_UNLOCKABLE" {
+		t.Errorf("summary unlockables: %d, last %v", len(st.Unlockables), st.Unlockables[len(st.Unlockables)-1])
+	}
+	if st.Contracts["11111111-2222-3333-4444-555555555555"].Metadata.Title != "Test" {
+		t.Errorf("summary contracts %v", st.Contracts)
+	}
+	if want := "Z:" + strings.ReplaceAll(filepath.Join(mod, "plugin.js"), "/", `\`); len(st.PeacockPlugins) != 1 || st.PeacockPlugins[0] != want {
+		t.Errorf("summary plugins %v, want %s", st.PeacockPlugins, want)
 	}
 }

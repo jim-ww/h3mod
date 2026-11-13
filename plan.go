@@ -37,6 +37,7 @@ type Plan struct {
 	Notes     []string                  // option reconciliation and similar
 	Skipped   map[string]map[string]int // mod -> unsupported feature -> count
 	Reordered bool                      // cfg.Enabled changed and needs saving
+	Server    serverState               // what Peacock reads from the deploy summary
 
 	entity   map[uint64]*entityJob // by TEMP hash
 	wwev     map[uint64]*wwevJob   // by WWEV hash
@@ -214,6 +215,9 @@ func (p *Plan) addMod(m *Mod, selected []string) error {
 			if err := p.addContentFolder(m, filepath.Join(m.Path, filepath.FromSlash(f))); err != nil {
 				return err
 			}
+		}
+		for _, f := range c.PeacockPlugins {
+			p.Server.plugins = append(p.Server.plugins, filepath.Join(m.Path, filepath.FromSlash(f)))
 		}
 		for _, f := range c.BlobsFolders {
 			if err := p.addBlobsFolder(filepath.Join(m.Path, filepath.FromSlash(f))); err != nil && !errors.Is(err, fs.ErrNotExist) {

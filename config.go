@@ -17,6 +17,9 @@ type Config struct {
 	// SkipIntro starts the game at the main menu, like SMF's option; it
 	// changes Retail/thumbs.dat, which undeploy restores.
 	SkipIntro bool `json:"skipIntro,omitempty"`
+	// DeploySummary is where Peacock looks for SMF's deploy summary;
+	// empty means its default on Linux, "off" writes none.
+	DeploySummary string `json:"deploySummary,omitempty"`
 	// Known are the mod folders seen so far; any other folder is new and
 	// gets enabled.
 	Known []string `json:"known"`

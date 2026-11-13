@@ -66,7 +66,8 @@ type ManifestContent struct {
 	SupportedPlatforms []string     `json:"supportedPlatforms"`
 	LoadBefore         []loadRule   `json:"loadBefore"` // mods this one must load before
 	LoadAfter          []loadRule   `json:"loadAfter"`
-	BlobsFolders       []string     `json:"blobsFolders"` // files served as online resources
+	PeacockPlugins     []string     `json:"peacockPlugins"` // plugin files Peacock runs
+	BlobsFolders       []string     `json:"blobsFolders"`   // files served as online resources
 
 	// Localisation is {language: {string ID: text}} for the global LOCR;
 	// LocalisationOverrides is {LOCR: {language: {decimal hash: text}}};
@@ -138,11 +139,6 @@ func (d Dependency) expand() []Dependency {
 	return out
 }
 
-// SMF manifest features h3mod doesn't implement yet.
-var unsupportedKeys = []string{
-	"peacockPlugins",
-}
-
 func discoverMods(dir string) ([]*Mod, error) {
 	ents, err := os.ReadDir(dir)
 	if err != nil {
@@ -189,34 +185,7 @@ func parseManifest(b []byte) (*Manifest, error) {
 	if err := json.Unmarshal(b, m); err != nil {
 		return nil, err
 	}
-	m.unsupported = usedKeys(b, unsupportedKeys)
-	var raw struct {
-		Options []json.RawMessage `json:"options"`
-	}
-	if err := json.Unmarshal(b, &raw); err != nil {
-		return nil, err
-	}
-	for i := range m.Options {
-		m.Options[i].unsupported = usedKeys(raw.Options[i], unsupportedKeys)
-	}
 	return m, nil
-}
-
-// usedKeys reports which of keys are present with a non-empty value.
-func usedKeys(obj []byte, keys []string) []string {
-	var m map[string]json.RawMessage
-	if json.Unmarshal(obj, &m) != nil {
-		return nil
-	}
-	var out []string
-	for _, k := range keys {
-		switch string(bytes.TrimSpace(m[k])) {
-		case "", "null", "[]", "{}":
-		default:
-			out = append(out, k)
-		}
-	}
-	return out
 }
 
 // stripJSONC turns the relaxed JSON SMF accepts in manifests (comments,

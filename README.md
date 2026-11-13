@@ -41,6 +41,7 @@ HITMAN 3 folder, next to `mods/`. Relative paths are relative to the config.
       "enabled": ["Mod A", ...],  // folder names, in load order; later wins
       "options": {...},           // chosen options per mod
       "skipIntro": true,
+      "deploySummary": "...",     // see Peacock below; "off" to disable
       "known": [...]              // mod folders seen so far (managed by h3mod)
     }
 
@@ -93,8 +94,20 @@ and empty choice groups fall back to theirs; each change is reported.
   ModJPFiles script
 - `skipIntro` in the config skips the intro
 
-Anything else (other scripts, Peacock plugins) is reported by `status` and
+- Peacock integration: modded unlockables and contracts, and `peacockPlugins`
+
+Anything else (mod scripts other than ModJPFiles) is reported by `status` and
 `deploy`.
+
+## Peacock
+
+Like SMF, a deploy writes a deploy summary that Peacock reads to serve modded
+unlockables and contracts and to run mods' plugins. By default it goes where
+Peacock on Linux looks: `$XDG_DATA_HOME/app.simple-mod-framework/deploySummary.json`.
+If Peacock runs under Wine, either set `"deploySummary"` to
+`<prefix>/drive_c/users/<user>/AppData/Local/Simple Mod Framework/deploySummary.json`,
+or point Peacock's `frameworkDeploySummaryPath` option at the file. h3mod
+only replaces or removes summaries it wrote itself; `undeploy` removes it.
 
 ## Caches
 

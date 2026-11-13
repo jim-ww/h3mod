@@ -160,6 +160,16 @@ func (d *Deployer) applyJSONEdits(p *Plan) error {
 		r := rawResource(h, ed.base.Type, ed.refs, data)
 		r.SysMem, r.VidMem = ed.base.SysMem, ed.base.VidMem
 		p.put(ed.chunk, r)
+
+		switch {
+		case h == unlockablesORES:
+			p.Server.unlockables = &node{isArr: true, arr: values(ed.doc)}
+		case ed.base.Type == "JSON":
+			// a patched contract
+			if id, err := ed.doc.get("Metadata", "Id").text(); err == nil && id != "" {
+				p.Server.addContract(id, ed.doc)
+			}
+		}
 	}
 	return nil
 }
@@ -213,6 +223,7 @@ func (d *Deployer) applyJSONEdit(p *Plan, e *jsonEdit, load func(uint64, string)
 		var buf bytes.Buffer
 		e.doc.encode(&buf)
 		p.put(0, rawResource(hash, "JSON", nil, buf.Bytes()))
+		p.Server.addContract(id, e.doc)
 	case "patch":
 		ed, err := load(e.target, e.typ)
 		if err != nil {
