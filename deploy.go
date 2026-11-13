@@ -81,6 +81,9 @@ func (d *Deployer) Deploy(ctx context.Context, skipUnsupported bool, out string)
 	if err := d.buildEntities(ctx, p); err != nil {
 		return err
 	}
+	if err := d.buildTextures(p); err != nil {
+		return err
+	}
 	if err := d.patchRepository(p); err != nil {
 		return err
 	}
@@ -183,6 +186,26 @@ func (d *Deployer) buildEntities(ctx context.Context, p *Plan) error {
 		p.put(j.chunk, results[i][1])
 	}
 	d.log("entities: %d in %s", len(p.Entities), time.Since(start).Round(time.Millisecond))
+	return nil
+}
+
+func (d *Deployer) buildTextures(p *Plan) error {
+	if len(p.Textures) == 0 {
+		return nil
+	}
+	idx, err := d.game.index()
+	if err != nil {
+		return err
+	}
+	start := time.Now()
+	cache := d.cfg.abs(filepath.Join("cache", "textures"))
+	vanilla := func(h uint64) *Resource { return idx.res[h] }
+	for _, j := range p.Textures {
+		if err := j.build(cache, vanilla); err != nil {
+			return fmt.Errorf("%s: %w", j.path, err)
+		}
+	}
+	d.log("textures: %d in %s", len(p.Textures), time.Since(start).Round(time.Millisecond))
 	return nil
 }
 

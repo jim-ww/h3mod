@@ -25,6 +25,7 @@ type Plan struct {
 	Chunks   map[int]map[uint64]*Resource
 	Repo     []*node
 	Entities []*entityJob
+	Textures []*textureJob             // built at deploy time into resources already placed
 	Notes    []string                  // option reconciliation and similar
 	Skipped  map[string]map[string]int // mod -> unsupported feature -> count
 
@@ -285,6 +286,15 @@ func (p *Plan) addContentFile(m *Mod, chunk int, path string) error {
 			return err
 		}
 		p.add(chunk, r)
+	case strings.HasSuffix(lower, ".texture.tga"):
+		j, err := newTextureJob(path)
+		if err != nil {
+			return err
+		}
+		for _, r := range j.out {
+			p.add(chunk, r)
+		}
+		p.Textures = append(p.Textures, j)
 	case rawFileName.MatchString(name):
 		r, err := readRawFile(path)
 		if errors.Is(err, fs.ErrNotExist) {
@@ -307,7 +317,7 @@ func (p *Plan) addContentFile(m *Mod, chunk int, path string) error {
 // specialFiles are SMF content types h3mod doesn't convert yet.
 var specialFiles = []string{
 	"unlockables.json", "contract.json", "json.patch.json", "material.json",
-	"texture.tga", "sfx.wem", "delta", "clng.json", "ditl.json",
+	"sfx.wem", "delta", "clng.json", "ditl.json",
 	"locr.json", "rtlv.json",
 }
 
