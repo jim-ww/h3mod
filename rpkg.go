@@ -97,18 +97,22 @@ func ReadArchive(path string) ([]*Resource, error) {
 	}
 	defer f.Close()
 
-	head := make([]byte, 29)
-	if _, err := io.ReadFull(f, head); err != nil {
+	head := make([]byte, 25)
+	n, err := io.ReadFull(f, head)
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	var p int
-	switch string(head[:4]) {
+	switch string(head[:min(n, 4)]) {
 	case "GKPR":
 		p = 4
 	case "2KPR":
 		p = 13
 	default:
 		return nil, fmt.Errorf("%s: not an rpkg", path)
+	}
+	if n < p+12 {
+		return nil, fmt.Errorf("%s: truncated header", path)
 	}
 	count := le.Uint32(head[p:])
 	indexSize := le.Uint32(head[p+4:])
