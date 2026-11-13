@@ -90,6 +90,9 @@ func (d *Deployer) Deploy(ctx context.Context, skipUnsupported bool, out string)
 	if err := d.buildRTLVs(ctx, p); err != nil {
 		return err
 	}
+	if err := d.buildWWEVs(p); err != nil {
+		return err
+	}
 	if err := d.patchRepository(p); err != nil {
 		return err
 	}
@@ -294,6 +297,27 @@ func (d *Deployer) buildDeltas(ctx context.Context, p *Plan) error {
 		if err := j.build(ctx, idx, d.cfg.abs(filepath.Join("cache", "deltas")), d.cfg.abs(filepath.Join("cache", "work"))); err != nil {
 			return fmt.Errorf("%s: %w", j.path, err)
 		}
+	}
+	return nil
+}
+
+// buildWWEVs places rebuilt WWEVs over anything mods shipped, like SMF does.
+func (d *Deployer) buildWWEVs(p *Plan) error {
+	if len(p.WWEVs) == 0 {
+		return nil
+	}
+	idx, err := d.game.index()
+	if err != nil {
+		return err
+	}
+	for _, j := range p.WWEVs {
+		if err := j.build(idx); err != nil {
+			return fmt.Errorf("WWEV %s: %w", hashString(j.out.Hash), err)
+		}
+		for _, res := range p.Chunks {
+			delete(res, j.out.Hash)
+		}
+		p.put(j.chunk, j.out)
 	}
 	return nil
 }

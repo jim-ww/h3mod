@@ -31,12 +31,14 @@ type Plan struct {
 	Blobs     []blob                    // online resources to register
 	Deltas    []*deltaJob               // built at deploy time, like textures
 	RTLVs     []*rtlvJob                // built at deploy time, like textures
+	WWEVs     []*wwevJob                // built at deploy time, placed after everything else
 	PD        []PDChange                // packagedefinition changes
 	Thumbs    []string                  // lines for thumbs.dat's [Hitman5] section
 	Notes     []string                  // option reconciliation and similar
 	Skipped   map[string]map[string]int // mod -> unsupported feature -> count
 
 	entity   map[uint64]*entityJob // by TEMP hash
+	wwev     map[uint64]*wwevJob   // by WWEV hash
 	fallback []placed              // added only where nothing else is
 	game     *gameData
 	condVars map[string]any // what conditional options are evaluated against
@@ -52,6 +54,7 @@ func newPlan(game *gameData) *Plan {
 		Chunks:  map[int]map[uint64]*Resource{},
 		Skipped: map[string]map[string]int{},
 		entity:  map[uint64]*entityJob{},
+		wwev:    map[uint64]*wwevJob{},
 		game:    game,
 	}
 }
@@ -408,6 +411,18 @@ func (p *Plan) addContentFile(m *Mod, chunk int, path string) error {
 		}
 		p.add(chunk, j.out)
 		p.Deltas = append(p.Deltas, j)
+	case strings.HasSuffix(lower, ".sfx.wem"):
+		h, i, err := parseWemName(path)
+		if err != nil {
+			return err
+		}
+		j := p.wwev[h]
+		if j == nil {
+			j = &wwevJob{chunk: chunk, wems: map[int]string{}, out: &Resource{Hash: h, Type: "WWEV"}}
+			p.wwev[h] = j
+			p.WWEVs = append(p.WWEVs, j)
+		}
+		j.wems[i] = path
 	case strings.HasSuffix(lower, ".material.json"):
 		res, err := buildMaterial(path)
 		if err != nil {
@@ -437,16 +452,8 @@ func (p *Plan) addContentFile(m *Mod, chunk int, path string) error {
 		p.add(chunk, r)
 	default:
 		// SMF ignores files that are neither resources nor special files.
-		if _, typ, ok := strings.Cut(lower, "."); ok && slices.Contains(specialFiles, typ) {
-			p.skip(m.Dir, typ)
-		}
 	}
 	return nil
-}
-
-// specialFiles are SMF content types h3mod doesn't convert yet.
-var specialFiles = []string{
-	"sfx.wem",
 }
 
 func (p *Plan) removeEntity(temp uint64) {
