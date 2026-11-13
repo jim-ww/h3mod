@@ -12,7 +12,7 @@ func TestPDRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.HasPrefix(got, plain) || len(got)%8 != 0 {
+	if !bytes.Equal(got, plain) {
 		t.Fatalf("round trip mismatch: %q", got)
 	}
 }

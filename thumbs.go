@@ -76,11 +76,10 @@ func writeThumbs(cfg *Config, skipIntro bool, lines []string) error {
 	if err != nil {
 		return fmt.Errorf("thumbs.dat: %w", err)
 	}
-	plain = bytes.ReplaceAll(plain, []byte("\r\n"), []byte("\n"))
 	if skipIntro {
 		plain = bytes.Replace(plain, []byte("Boot.entity"), []byte("MainMenu.entity"), 1)
 	}
-	section := regexp.MustCompile(`(?i)\[Hitman5\]\n`)
+	section := regexp.MustCompile(`(?i)\[Hitman5\]\r?\n`)
 	for _, l := range lines {
 		loc := section.FindIndex(plain)
 		if loc == nil {

@@ -68,34 +68,11 @@ func decryptPD(b []byte) ([]byte, error) {
 	return nil, errors.New("packagedefinition checksum mismatch")
 }
 
-// encryptPD pads with a trailing comment line so no NUL padding is needed.
+// encryptPD encrypts like h6xtea, the tool SMF uses: the checksum covers
+// the text, and the last block is padded with NULs.
 func encryptPD(plain []byte) []byte {
-	if !bytes.HasSuffix(plain, []byte("\n")) {
-		plain = append(plain, '\r', '\n')
-	}
-	if r := len(plain) % 8; r != 0 {
-		pad := 8 - r
-		for pad < 4 {
-			pad += 8
-		}
-		plain = append(plain, '/', '/')
-		plain = append(plain, bytes.Repeat([]byte{' '}, pad-4)...)
-		plain = append(plain, '\r', '\n')
-	}
-	out := make([]byte, 20+len(plain))
-	copy(out, pdMagic)
-	binary.LittleEndian.PutUint32(out[16:], crc32.ChecksumIEEE(plain))
-	body := out[20:]
-	for i := 0; i < len(plain); i += 8 {
-		v0, v1 := binary.LittleEndian.Uint32(plain[i:]), binary.LittleEndian.Uint32(plain[i+4:])
-		var sum uint32
-		for range 32 {
-			v0 += ((v1<<4 ^ v1>>5) + v1) ^ (sum + pdKey[sum&3])
-			sum += xteaDelta
-			v1 += ((v0<<4 ^ v0>>5) + v0) ^ (sum + pdKey[sum>>11&3])
-		}
-		binary.LittleEndian.PutUint32(body[i:], v0)
-		binary.LittleEndian.PutUint32(body[i+4:], v1)
-	}
-	return out
+	sum := crc32.ChecksumIEEE(plain)
+	out := append(append([]byte(nil), pdMagic...), 0, 0, 0, 0)
+	binary.LittleEndian.PutUint32(out[16:], sum)
+	return append(out, xteaEncrypt(pdKey, plain)...)
 }
