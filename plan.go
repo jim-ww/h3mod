@@ -26,6 +26,7 @@ type Plan struct {
 	Repo     []*node
 	Entities []*entityJob
 	Textures []*textureJob             // built at deploy time into resources already placed
+	Loc      []locEdit                 // strings to set in LOCRs
 	PD       []PDChange                // packagedefinition changes
 	Thumbs   []string                  // lines for thumbs.dat's [Hitman5] section
 	Notes    []string                  // option reconciliation and similar
@@ -201,6 +202,24 @@ func (p *Plan) addMod(m *Mod, selected []string) error {
 				return err
 			}
 		}
+		if c.Localisation != nil || c.LocalisationOverrides != nil {
+			hl, err := p.game.hashList()
+			if err != nil {
+				return err
+			}
+			edits, err := manifestLocalisation(c, hl)
+			if err != nil {
+				return err
+			}
+			p.Loc = append(p.Loc, edits...)
+		}
+		for h, id := range c.LocalisedLines {
+			hash, err := parseHash(h)
+			if err != nil {
+				return fmt.Errorf("localisedLines: %w", err)
+			}
+			p.add(0, lineResource(hash, id))
+		}
 		p.PD = append(p.PD, c.Packagedefinition...)
 		p.Thumbs = append(p.Thumbs, c.Thumbs...)
 	}
@@ -323,6 +342,26 @@ func (p *Plan) addContentFile(m *Mod, chunk int, path string) error {
 			return err
 		}
 		p.add(chunk, r)
+	case strings.HasSuffix(lower, ".locr.json"), strings.HasSuffix(lower, ".ditl.json"):
+		hl, err := p.game.hashList()
+		if err != nil {
+			return err
+		}
+		build := buildLOCRJSON
+		if strings.HasSuffix(lower, ".ditl.json") {
+			build = buildDITL
+		}
+		r, err := build(path, hl)
+		if err != nil {
+			return err
+		}
+		p.add(chunk, r)
+	case strings.HasSuffix(lower, ".clng.json"):
+		r, err := buildCLNG(path)
+		if err != nil {
+			return err
+		}
+		p.add(chunk, r)
 	case strings.HasSuffix(lower, ".material.json"):
 		res, err := buildMaterial(path)
 		if err != nil {
@@ -362,8 +401,7 @@ func (p *Plan) addContentFile(m *Mod, chunk int, path string) error {
 // specialFiles are SMF content types h3mod doesn't convert yet.
 var specialFiles = []string{
 	"unlockables.json", "contract.json", "json.patch.json",
-	"sfx.wem", "delta", "clng.json", "ditl.json",
-	"locr.json", "rtlv.json",
+	"sfx.wem", "delta", "rtlv.json",
 }
 
 func (p *Plan) removeEntity(temp uint64) {

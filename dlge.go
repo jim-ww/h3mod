@@ -20,6 +20,7 @@ import (
 type HashList struct {
 	tags     map[string]uint32
 	switches map[string]uint32
+	lines    map[string]uint32 // localisation string names
 }
 
 func loadHashList(path string) (*HashList, error) {
@@ -35,7 +36,7 @@ func loadHashList(path string) (*HashList, error) {
 	}
 	r := &byteReader{b: b, i: 12}
 	hl := &HashList{}
-	for _, m := range []*map[string]uint32{&hl.tags, &hl.switches} {
+	for _, m := range []*map[string]uint32{&hl.tags, &hl.switches, &hl.lines} {
 		n := r.u32()
 		*m = make(map[string]uint32, n)
 		for range n {

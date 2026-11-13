@@ -30,6 +30,16 @@ func parseJSON(b []byte) (*node, error) {
 	return n, nil
 }
 
+// UnmarshalJSON lets ordered values be decoded as struct fields.
+func (n *node) UnmarshalJSON(b []byte) error {
+	p, err := parseJSON(b)
+	if err != nil {
+		return err
+	}
+	*n = *p
+	return nil
+}
+
 func decodeNode(d *json.Decoder) (*node, error) {
 	tok, err := d.Token()
 	if err != nil {

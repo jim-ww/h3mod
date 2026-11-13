@@ -62,6 +62,13 @@ type ManifestContent struct {
 	Thumbs            []string     `json:"thumbs"`
 	Requirements      []string     `json:"requirements"` // mod IDs that must be enabled
 
+	// Localisation is {language: {string ID: text}} for the global LOCR;
+	// LocalisationOverrides is {LOCR: {language: {decimal hash: text}}};
+	// LocalisedLines is {LINE hash: string ID}.
+	Localisation          *node             `json:"localisation"`
+	LocalisationOverrides *node             `json:"localisationOverrides"`
+	LocalisedLines        map[string]string `json:"localisedLines"`
+
 	unsupported []string
 }
 
@@ -127,8 +134,7 @@ func (d Dependency) expand() []Dependency {
 
 // SMF manifest features h3mod doesn't implement yet.
 var unsupportedKeys = []string{
-	"blobsFolders", "localisation", "localisationOverrides", "localisedLines",
-	"peacockPlugins",
+	"blobsFolders", "peacockPlugins",
 }
 
 func discoverMods(dir string) ([]*Mod, error) {

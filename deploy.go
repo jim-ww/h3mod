@@ -87,6 +87,9 @@ func (d *Deployer) Deploy(ctx context.Context, skipUnsupported bool, out string)
 	if err := d.patchRepository(p); err != nil {
 		return err
 	}
+	if err := d.patchLocalisation(p); err != nil {
+		return err
+	}
 
 	cleanPD, err := ensureCleanPD(d.cfg)
 	if err != nil {
@@ -220,6 +223,50 @@ func (d *Deployer) buildTextures(p *Plan) error {
 		}
 	}
 	d.log("textures: %d in %s", len(p.Textures), time.Since(start).Round(time.Millisecond))
+	return nil
+}
+
+// patchLocalisation applies manifest strings to their LOCRs, starting from
+// a version a mod ships or the game's.
+func (d *Deployer) patchLocalisation(p *Plan) error {
+	if len(p.Loc) == 0 {
+		return nil
+	}
+	byLOCR := map[uint64][]locEdit{}
+	var order []uint64
+	for _, e := range p.Loc {
+		if _, ok := byLOCR[e.locr]; !ok {
+			order = append(order, e.locr)
+		}
+		byLOCR[e.locr] = append(byLOCR[e.locr], e)
+	}
+	idx, err := d.game.index()
+	if err != nil {
+		return err
+	}
+	for _, h := range order {
+		chunk, base := p.staged(h)
+		if base == nil {
+			if base, err = idx.lookup(h); err != nil {
+				return err
+			}
+			chunk = idx.chunkOf(base)
+		}
+		data, err := base.Data()
+		if err != nil {
+			return err
+		}
+		l, err := parseLOCR(data)
+		if err != nil {
+			return fmt.Errorf("LOCR %016X: %w", h, err)
+		}
+		for _, e := range byLOCR[h] {
+			l.set(e.lang, e.key, e.text)
+		}
+		r := locrResource(h, l)
+		r.Refs = base.Refs
+		p.put(chunk, r)
+	}
 	return nil
 }
 
