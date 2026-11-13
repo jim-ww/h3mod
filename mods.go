@@ -303,11 +303,18 @@ func (m *Manifest) optionKeys() []string {
 
 // content returns the manifest content active for a selection: the root plus
 // every selected option, in manifest order like SMF.
-func (m *Manifest) content(selected []string) []ManifestContent {
+// Conditional options apply when their condition holds for vars, which is
+// what SMF passes to filtrex ({"config": {"loadOrder": ..., ...}}).
+func (m *Manifest) content(selected []string, vars map[string]any) []ManifestContent {
 	out := []ManifestContent{m.ManifestContent}
 	for _, o := range m.Options {
 		if o.Type == "conditional" {
-			out = append(out, ManifestContent{unsupported: []string{"conditional option " + o.Name}})
+			on, err := evalCondition(o.Condition, vars)
+			if err != nil {
+				out = append(out, ManifestContent{unsupported: []string{fmt.Sprintf("condition of %q (%v)", o.Name, err)}})
+			} else if on {
+				out = append(out, o.ManifestContent)
+			}
 			continue
 		}
 		if slices.Contains(selected, o.Key()) {

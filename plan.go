@@ -37,6 +37,7 @@ type Plan struct {
 	entity   map[uint64]*entityJob // by TEMP hash
 	fallback []placed              // added only where nothing else is
 	game     *gameData
+	condVars map[string]any // what conditional options are evaluated against
 }
 
 type placed struct {
@@ -89,11 +90,19 @@ func buildPlan(cfg *Config, game *gameData, strict bool) (*Plan, error) {
 	}
 	p := newPlan(game)
 	enabled := map[string]bool{}
+	var loadOrder []string
+	modOptions := map[string]any{}
 	for _, dir := range cfg.Enabled {
 		if m := findMod(mods, dir); m != nil {
 			enabled[strings.ToLower(m.ID())] = true
+			loadOrder = append(loadOrder, m.ID())
+			sel, _ := cfg.selection(m)
+			modOptions[m.ID()] = sel
 		}
 	}
+	p.condVars = map[string]any{"config": map[string]any{
+		"loadOrder": loadOrder, "modOptions": modOptions, "platform": "steam",
+	}}
 	for _, dir := range cfg.Enabled {
 		i := slices.IndexFunc(mods, func(m *Mod) bool { return m.Dir == dir })
 		if i < 0 {
@@ -127,7 +136,7 @@ func (p *Plan) checkRelations(m *Mod, selected []string, enabled map[string]bool
 	if m.Manifest == nil {
 		return
 	}
-	for _, c := range m.Manifest.content(selected) {
+	for _, c := range m.Manifest.content(selected, p.condVars) {
 		for _, r := range c.Requirements {
 			if !enabled[strings.ToLower(r)] {
 				p.Notes = append(p.Notes, fmt.Sprintf("%s: requires %s, which is not enabled", m.Dir, r))
@@ -183,7 +192,7 @@ func (p *Plan) addMod(m *Mod, selected []string) error {
 	if m.Manifest == nil {
 		return p.addRPKGMod(m.Path)
 	}
-	for _, c := range m.Manifest.content(selected) {
+	for _, c := range m.Manifest.content(selected, p.condVars) {
 		for _, u := range c.unsupported {
 			p.skip(m.Dir, u)
 		}
