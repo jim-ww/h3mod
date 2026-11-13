@@ -22,7 +22,7 @@ import (
 const usage = `usage: h3mod [-config h3mod.json] <command> [args]
 
 mods:
-  status                       list mods in load order, options and problems
+  status                       list enabled and disabled mods, options, problems
   enable <mod>...              enable mods (appended to the load order)
   disable <mod>...             disable mods
   move <mod> <position>        move a mod in the load order (later wins)
@@ -38,7 +38,9 @@ deploying:
   undeploy                     restore vanilla game files
   import-smf [config.json]     take load order and options from SMF
 
-<mod> is a folder name in the mods directory or a mod ID.
+<mod> is a folder name in the mods directory or a mod ID. New folders in the
+mods directory show up as disabled; deleting a folder drops the mod from the
+load order on the next deploy.
 `
 
 func main() {
@@ -67,6 +69,9 @@ func run(ctx context.Context, args []string) error {
 	}
 	cmd, rest := fl.Arg(0), fl.Args()[1:]
 	switch cmd {
+	case "help":
+		fmt.Print(usage)
+		return nil
 	case "status":
 		return status(cfg)
 	case "enable", "disable":
@@ -116,7 +121,7 @@ func status(cfg *Config) error {
 	for i, dir := range cfg.Enabled {
 		m := findMod(mods, dir)
 		if m == nil {
-			fmt.Printf("  %2d. %s (missing)\n", i+1, dir)
+			fmt.Printf("  %2d. %s (folder gone, dropped on deploy)\n", i+1, dir)
 			continue
 		}
 		fmt.Printf("  %2d. %s (%s)\n", i+1, m.Title(), dir)
@@ -124,7 +129,7 @@ func status(cfg *Config) error {
 			fmt.Printf("      options: %s\n", strings.Join(sel, ", "))
 		}
 	}
-	fmt.Println("disabled:")
+	fmt.Println("disabled (h3mod enable <mod>):")
 	for _, m := range mods {
 		if !cfg.isEnabled(m.Dir) {
 			fmt.Printf("      %s (%s)\n", m.Title(), m.Dir)

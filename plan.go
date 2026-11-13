@@ -36,7 +36,7 @@ type Plan struct {
 	Thumbs    []string                  // lines for thumbs.dat's [Hitman5] section
 	Notes     []string                  // option reconciliation and similar
 	Skipped   map[string]map[string]int // mod -> unsupported feature -> count
-	Reordered bool                      // cfg.Enabled was sorted and needs saving
+	Reordered bool                      // cfg.Enabled changed and needs saving
 
 	entity   map[uint64]*entityJob // by TEMP hash
 	wwev     map[uint64]*wwevJob   // by WWEV hash
@@ -87,9 +87,10 @@ func newGameData(cfg *Config) *gameData {
 	}
 }
 
-// buildPlan collects the enabled mods in load order. Missing mods are an
-// error when strict, and skipped otherwise.
-func buildPlan(cfg *Config, game *gameData, strict bool) (*Plan, error) {
+// buildPlan collects the enabled mods in load order, skipping mods whose
+// folders are gone. For a deploy, those are also dropped from the load order
+// and it is sorted by the mods' rules; p.Reordered says cfg changed.
+func buildPlan(cfg *Config, game *gameData, deploying bool) (*Plan, error) {
 	mods, err := discoverMods(cfg.abs(cfg.Mods))
 	if err != nil {
 		return nil, err
@@ -109,7 +110,19 @@ func buildPlan(cfg *Config, game *gameData, strict bool) (*Plan, error) {
 	p.condVars = map[string]any{"config": map[string]any{
 		"loadOrder": loadOrder, "modOptions": modOptions, "platform": platform,
 	}}
-	if strict {
+	if deploying {
+		var gone []string
+		cfg.Enabled = slices.DeleteFunc(cfg.Enabled, func(dir string) bool {
+			if slices.ContainsFunc(mods, func(m *Mod) bool { return m.Dir == dir }) {
+				return false
+			}
+			gone = append(gone, dir)
+			return true
+		})
+		if len(gone) > 0 {
+			p.Reordered = true
+			p.Notes = append(p.Notes, "removed from the load order, folder is gone: "+strings.Join(gone, ", "))
+		}
 		order, err := sortLoadOrder(cfg, mods, p.condVars)
 		if err != nil {
 			return nil, err
@@ -123,9 +136,6 @@ func buildPlan(cfg *Config, game *gameData, strict bool) (*Plan, error) {
 	for _, dir := range cfg.Enabled {
 		i := slices.IndexFunc(mods, func(m *Mod) bool { return m.Dir == dir })
 		if i < 0 {
-			if strict {
-				return nil, fmt.Errorf("enabled mod %q not found in %s", dir, cfg.abs(cfg.Mods))
-			}
 			continue
 		}
 		m := mods[i]
