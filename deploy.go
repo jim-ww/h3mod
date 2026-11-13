@@ -87,6 +87,9 @@ func (d *Deployer) Deploy(ctx context.Context, skipUnsupported bool, out string)
 	if err := d.buildDeltas(ctx, p); err != nil {
 		return err
 	}
+	if err := d.buildRTLVs(ctx, p); err != nil {
+		return err
+	}
 	if err := d.patchRepository(p); err != nil {
 		return err
 	}
@@ -289,6 +292,22 @@ func (d *Deployer) buildDeltas(ctx context.Context, p *Plan) error {
 	}
 	for _, j := range p.Deltas {
 		if err := j.build(ctx, idx, d.cfg.abs(filepath.Join("cache", "deltas")), d.cfg.abs(filepath.Join("cache", "work"))); err != nil {
+			return fmt.Errorf("%s: %w", j.path, err)
+		}
+	}
+	return nil
+}
+
+func (d *Deployer) buildRTLVs(ctx context.Context, p *Plan) error {
+	if len(p.RTLVs) == 0 {
+		return nil
+	}
+	tools, err := findTools()
+	if err != nil {
+		return err
+	}
+	for _, j := range p.RTLVs {
+		if err := j.build(ctx, tools, d.cfg.abs(filepath.Join("cache", "rtlv")), d.cfg.abs(filepath.Join("cache", "work"))); err != nil {
 			return fmt.Errorf("%s: %w", j.path, err)
 		}
 	}

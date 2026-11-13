@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -126,13 +127,21 @@ func (n *node) size() int {
 	return 1
 }
 
+var errMissing = errors.New("missing value")
+
 func (n *node) float() (float32, error) {
+	if n == nil {
+		return 0, errMissing
+	}
 	var f float64
 	err := json.Unmarshal(n.raw, &f)
 	return float32(f), err
 }
 
 func (n *node) text() (string, error) {
+	if n == nil {
+		return "", errMissing
+	}
 	var s string
 	err := json.Unmarshal(n.raw, &s)
 	return s, err
