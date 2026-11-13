@@ -36,10 +36,15 @@ func decryptPD(b []byte) ([]byte, error) {
 		binary.LittleEndian.PutUint32(out[i:], v0)
 		binary.LittleEndian.PutUint32(out[i+4:], v1)
 	}
-	if crc32.ChecksumIEEE(out) != binary.LittleEndian.Uint32(b[16:]) {
-		return nil, errors.New("packagedefinition checksum mismatch")
+	want := binary.LittleEndian.Uint32(b[16:])
+	if crc32.ChecksumIEEE(out) == want {
+		return out, nil
 	}
-	return out, nil
+	// h6xtea (SMF) pads with NULs and checksums the unpadded text.
+	if t := bytes.TrimRight(out, "\x00"); crc32.ChecksumIEEE(t) == want {
+		return t, nil
+	}
+	return nil, errors.New("packagedefinition checksum mismatch")
 }
 
 // encryptPD pads with a trailing comment line so no NUL padding is needed.
