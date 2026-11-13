@@ -4,14 +4,14 @@ Deploys HITMAN 3 mods from a folder of unpacked mods. Reads SMF (Simple Mod
 Framework) mods and plain rpkg mods as they are.
 
 Base game archives are never written. A deploy writes `chunkNpatch300.rpkg`
-archives and `packagedefinition.txt`, each to a temp file first and renamed
-into place, with packagedefinition last. An interrupted deploy leaves the
+archives, `packagedefinition.txt` and `thumbs.dat`, each to a temp file
+first and renamed into place, archives first. An interrupted deploy leaves the
 game as it was; the next deploy cleans up. `undeploy` restores vanilla.
 
 ## Running
 
-The external tools (ResourceTool, quickentity-rs) and the hash list come from
-the flake:
+The external tools (ResourceTool, quickentity-rs, xdelta3) and the hash lists
+come from the flake:
 
     nix run . -- status            # packaged binary
     nix develop -c go run . status # from source (or direnv with .envrc)
@@ -22,7 +22,8 @@ Config is `h3mod.json` in the current directory (`-config` to change):
       "game": "..",               // HITMAN 3 folder
       "mods": "../SMF/Mods",      // folder of unpacked mods
       "enabled": ["Mod A", ...],  // folder names, in load order; later wins
-      "options": {...}            // chosen options per mod
+      "options": {...},           // chosen options per mod
+      "skipIntro": true
     }
 
 ## Commands
@@ -45,17 +46,25 @@ and empty choice groups fall back to theirs; each change is reported.
 
 ## Supported
 
-- framework mods: content folders, checkbox and select options
+- framework mods: content folders, checkbox and select options, conditional
+  options, requirements and incompatibilities
 - raw files with `.meta` or `.meta.json`, rpkg mods
-- `repository.json`, `entity.json`, `entity.patch.json`, `dlge.json`,
-  `material.json`, `texture.tga`
-- manifest `dependencies`, and the standard ModJPFiles script
+- `repository.json`, `entity.json`, `entity.patch.json`, `material.json`,
+  `texture.tga`, `.delta`, `sfx.wem`
+- `unlockables.json`, `contract.json`, `JSON.patch.json`, blobs folders
+- `dlge.json`, `locr.json`, `ditl.json`, `clng.json`, `rtlv.json`, manifest
+  localisation and localised lines
+- manifest `dependencies`, `packagedefinition`, `thumbs`, and the standard
+  ModJPFiles script
+- `skipIntro` in the config skips the intro
 
-Anything else is reported by `status` and `deploy`.
+Anything else (other scripts, Peacock plugins) is reported by `status` and
+`deploy`.
 
 ## Caches
 
-`cache/` holds built entities and textures, keyed by their inputs;
+`cache/` holds built entities, textures, deltas and RTLVs, keyed by their
+inputs;
 `state.json` records deployed archives so unchanged ones are not rewritten.
 Both can be deleted at any time. `clean/` keeps the vanilla
-packagedefinition and must be kept.
+packagedefinition and thumbs.dat and must be kept.
