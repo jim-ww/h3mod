@@ -10,28 +10,46 @@ game as it was; the next deploy cleans up. `undeploy` restores vanilla.
 
 ## Running
 
+### On other Linux systems
+
+`nix build .#bundle` makes `result/h3mod-linux-x64.tar.gz`: the h3mod
+binary with every tool and hash list it needs in `tools/` and `data/`. It
+runs on any x86_64 Linux with glibc 2.34+ (ResourceTool is the upstream
+build); on NixOS use the flake instead. Unpack it anywhere and, from a
+folder holding `h3mod.json`:
+
+    /path/to/h3mod-linux-x64/h3mod status
+
+A plain `go build` binary has none of these tools and only works where they
+are in PATH.
+
+### With nix
+
 The external tools (ResourceTool, quickentity-rs, xdelta3, 7-Zip) and the hash lists
 come from the flake:
 
     nix run . -- status            # packaged binary
     nix develop -c go run . status # from source (or direnv with .envrc)
 
-Config is `h3mod.json` in the current directory (`-config` to change):
+Config is `h3mod.json` in the current directory (`-config` to change).
+Without one, h3mod uses the defaults below: run it from a folder inside the
+HITMAN 3 folder, next to `mods/`. Relative paths are relative to the config.
 
     {
       "game": "..",               // HITMAN 3 folder
-      "mods": "../SMF/Mods",      // folder of unpacked mods
+      "mods": "mods",             // folder of unpacked mods, e.g. "../SMF/Mods"
       "enabled": ["Mod A", ...],  // folder names, in load order; later wins
       "options": {...},           // chosen options per mod
-      "skipIntro": true
+      "skipIntro": true,
+      "known": [...]              // mod folders seen so far (managed by h3mod)
     }
 
 ## Commands
 
     status                         mods in load order, options, problems
-    enable <mod>... / disable <mod>...
+    enable <mod>... | all / disable <mod>... | all
     move <mod> <position>
-    install [-name n] [-replace] [-enable] <archive|rpkg>
+    install [-name n] [-replace] <archive|rpkg>
     updates                        check mods' update URLs
     update <mod>...                download and install new versions
     options <mod>                  list options and what is selected
@@ -41,8 +59,10 @@ Config is `h3mod.json` in the current directory (`-config` to change):
     deploy [-skip-unsupported] [-out dir]
     undeploy
 
-`<mod>` is a folder name or a mod ID. New folders in the mods directory show
-up as disabled; a deleted folder is dropped from the load order on deploy.
+`<mod>` is a number from `status`, a folder name, a mod ID, or any part of
+the name only one mod has; `enable all`/`disable all` work too. New folders in
+the mods directory are enabled automatically (at the end of the load order);
+deleted ones drop out of it. On a first run every mod is enabled.
 
 `install` takes what SMF's Mod Manager does: archives of framework mod
 folders, or `.rpkg` files (loose or archived) that become an rpkg mod named
