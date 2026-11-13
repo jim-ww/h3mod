@@ -94,6 +94,7 @@ and empty choice groups fall back to theirs; each change is reported.
   ModJPFiles script
 - `skipIntro` in the config skips the intro
 
+- contracts added to the Destinations menu (`SMF.destinations`)
 - Peacock integration: modded unlockables and contracts, and `peacockPlugins`
 
 Anything else (mod scripts other than ModJPFiles) is reported by `status` and

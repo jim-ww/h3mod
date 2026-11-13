@@ -28,7 +28,8 @@ func TestDeployJSONEdits(t *testing.T) {
 	write("manifest.json", `{"id":"Test.Mod","name":"Test","version":"1","contentFolders":["content"],"blobsFolders":["blobs"],"peacockPlugins":["plugin.js"]}`)
 	write("blobs/images/Test.png", "not really a png")
 	write("content/chunk0/a.unlockables.json", `{"TEST_UNLOCKABLE":{"Type":"gear","Subtype":"test"}}`)
-	write("content/chunk0/b.contract.json", `{"Metadata":{"Id":"11111111-2222-3333-4444-555555555555","Title":"Test"}}`)
+	write("content/chunk0/b.contract.json", `{"Metadata":{"Id":"11111111-2222-3333-4444-555555555555","Title":"Test"},
+		"SMF":{"destinations":{"addToDestinations":true,"narrativeContext":"Campaign"}}}`)
 	write("content/chunk0/c.JSON.patch.json", `{"file":"00204D1AFD76AB13","type":"REPO","patch":[
 		{"op":"replace","path":"/2b1bd2af-554e-4ea7-a717-3f6d0eb0215f/Evergreen_Rarity","value":7}]}`)
 
@@ -78,6 +79,9 @@ func TestDeployJSONEdits(t *testing.T) {
 	if !bytes.Contains(data(h), []byte(`"Title":"Test"`)) {
 		t.Error("contract JSON missing")
 	}
+	if !bytes.Contains(data(destinationsJSON), []byte(`{"Id":"11111111-2222-3333-4444-555555555555","_comment":"Automatically added by SMF.","NarrativeContext":"Campaign"`)) {
+		t.Error("contract not added to destinations")
+	}
 	if !bytes.Contains(data(repoHash), []byte(`"Evergreen_Rarity":7`)) {
 		t.Error("repository JSON patch not applied")
 	}
@@ -121,5 +125,35 @@ func TestDeployJSONEdits(t *testing.T) {
 	}
 	if want := "Z:" + strings.ReplaceAll(filepath.Join(mod, "plugin.js"), "/", `\`); len(st.PeacockPlugins) != 1 || st.PeacockPlugins[0] != want {
 		t.Errorf("summary plugins %v, want %s", st.PeacockPlugins, want)
+	}
+}
+
+func TestAddToDestinations(t *testing.T) {
+	contract := func(id, dest string) *node {
+		n, err := parseJSON([]byte(`{"Metadata":{"Id":"` + id + `"},"SMF":{"destinations":{"addToDestinations":true` + dest + `}}}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	reg, _ := parseJSON([]byte(`{"Root":{"Children":[{"Id":"a"},{"Id":"b"},{"Id":"c"}]}}`))
+	err := addToDestinations(reg, []*node{
+		contract("end", ``),
+		contract("beforeB", `,"placeBefore":"b"`),
+		contract("afterA", `,"placeAfter":"a"`),
+		contract("afterMissing", `,"placeAfter":"zz"`),
+		contract("beforeMissing", `,"placeBefore":"zz"`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, c := range reg.get("Root", "Children").arr {
+		id, _ := c.get("Id").text()
+		ids = append(ids, id)
+	}
+	want := "afterMissing a afterA beforeB b c beforeMissing end"
+	if got := strings.Join(ids, " "); got != want {
+		t.Errorf("got %s, want %s", got, want)
 	}
 }

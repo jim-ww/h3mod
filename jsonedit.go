@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 )
 
@@ -125,9 +127,24 @@ func (d *Deployer) applyJSONEdits(p *Plan) error {
 		return ed, nil
 	}
 
+	var dests []*node
 	for _, e := range p.JSONEdits {
 		if err := d.applyJSONEdit(p, e, load); err != nil {
 			return fmt.Errorf("%s: %w", e.source, err)
+		}
+		if e.kind == "contract" {
+			if add := e.doc.get("SMF", "destinations", "addToDestinations"); add != nil && string(add.raw) == "true" {
+				dests = append(dests, e.doc)
+			}
+		}
+	}
+	if len(dests) > 0 {
+		ed, err := load(destinationsJSON, "JSON")
+		if err != nil {
+			return err
+		}
+		if err := addToDestinations(ed.doc, dests); err != nil {
+			return err
 		}
 	}
 
@@ -170,6 +187,58 @@ func (d *Deployer) applyJSONEdits(p *Plan) error {
 				p.Server.addContract(id, ed.doc)
 			}
 		}
+	}
+	return nil
+}
+
+// destinationsJSON lists the missions shown in the Destinations menu.
+const destinationsJSON = 0x004F4B738474CEAD
+
+// addToDestinations adds contracts to the Destinations registry the way SMF
+// does, including where a placeBefore/placeAfter target is missing.
+func addToDestinations(registry *node, contracts []*node) error {
+	children := registry.get("Root", "Children")
+	if children == nil || !children.isArr {
+		return errors.New("destinations registry has no Root.Children")
+	}
+	for _, c := range contracts {
+		id, _ := c.get("Metadata", "Id").text()
+		dst := c.get("SMF", "destinations")
+		before, _ := dst.get("placeBefore").text()
+		after, _ := dst.get("placeAfter").text()
+		context, _ := dst.get("narrativeContext").text()
+		if context == "" {
+			context = "Mission"
+		}
+		idJSON, _ := marshalScalar(id)
+		contextJSON, _ := marshalScalar(context)
+		entry, err := parseJSON(fmt.Appendf(nil,
+			`{"Id":%s,"_comment":"Automatically added by SMF.","NarrativeContext":%s,"Meta":{"Ui":{"Row":3,"Col":5}}}`,
+			idJSON, contextJSON))
+		if err != nil {
+			return err
+		}
+		find := func(want string) int {
+			for i, ch := range children.arr {
+				if v, _ := ch.get("Id").text(); v == want {
+					return i
+				}
+			}
+			return -1
+		}
+		// JavaScript's splice treats SMF's -1 from a failed lookup as
+		// "before the last element".
+		at := len(children.arr)
+		switch {
+		case before != "":
+			at = find(before)
+			if at < 0 {
+				at = max(len(children.arr)-1, 0)
+			}
+		case after != "":
+			at = find(after) + 1
+		}
+		children.arr = slices.Insert(children.arr, at, entry)
 	}
 	return nil
 }
