@@ -23,7 +23,8 @@ func TestDeployJSONEdits(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write("manifest.json", `{"id":"Test.Mod","name":"Test","version":"1","contentFolders":["content"]}`)
+	write("manifest.json", `{"id":"Test.Mod","name":"Test","version":"1","contentFolders":["content"],"blobsFolders":["blobs"]}`)
+	write("blobs/images/Test.png", "not really a png")
 	write("content/chunk0/a.unlockables.json", `{"TEST_UNLOCKABLE":{"Type":"gear","Subtype":"test"}}`)
 	write("content/chunk0/b.contract.json", `{"Metadata":{"Id":"11111111-2222-3333-4444-555555555555","Title":"Test"}}`)
 	write("content/chunk0/c.JSON.patch.json", `{"file":"00204D1AFD76AB13","type":"REPO","patch":[
@@ -64,7 +65,7 @@ func TestDeployJSONEdits(t *testing.T) {
 	if !bytes.Contains(u, []byte(`{"Id":"TEST_UNLOCKABLE","Type":"gear","Subtype":"test"}`)) {
 		t.Error("unlockable not added")
 	}
-	entries, err := parseContractsORES(data(contractsORES))
+	entries, err := parseNameTable(data(contractsORES))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,5 +78,16 @@ func TestDeployJSONEdits(t *testing.T) {
 	}
 	if !bytes.Contains(data(repoHash), []byte(`"Evergreen_Rarity":7`)) {
 		t.Error("repository JSON patch not applied")
+	}
+	bh := ioiHash("[assembly:/_pro/online/default/cloudstorage/resources/images/test.png].pc_gfx")
+	if got[bh] == nil || got[bh].Type != "GFXI" || string(data(bh)) != "not really a png" {
+		t.Error("blob not deployed")
+	}
+	blobs, err := parseNameTable(data(blobsORES))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if last := blobs[len(blobs)-1]; last.hash != bh || last.id != "images/test.png" {
+		t.Errorf("blob not registered: %+v", last)
 	}
 }

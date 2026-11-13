@@ -101,7 +101,7 @@ func (d *Deployer) applyJSONEdits(p *Plan) error {
 			}
 			ed.doc = keyedByID(arr, "Id")
 		case h == contractsORES:
-			entries, err := parseContractsORES(data)
+			entries, err := parseNameTable(data)
 			if err != nil {
 				return nil, err
 			}
@@ -140,16 +140,16 @@ func (d *Deployer) applyJSONEdits(p *Plan) error {
 			(&node{isArr: true, arr: values(ed.doc)}).encode(&buf)
 			data = buildUnlockablesORES(buf.Bytes())
 		case h == contractsORES:
-			var entries []contractEntry
+			var entries []nameEntry
 			for _, k := range ed.doc.keys {
 				hh, err := strconv.ParseUint(k, 16, 64)
 				if err != nil {
 					return fmt.Errorf("contracts table: %q is not a hash", k)
 				}
 				id, _ := ed.doc.obj[k].text()
-				entries = append(entries, contractEntry{id, hh})
+				entries = append(entries, nameEntry{id, hh})
 			}
-			data = buildContractsORES(entries)
+			data = buildNameTable(entries)
 		case ed.base.Type == "REPO":
 			(&node{isArr: true, arr: values(ed.doc)}).encode(&buf)
 			data = buf.Bytes()

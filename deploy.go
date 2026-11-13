@@ -93,6 +93,9 @@ func (d *Deployer) Deploy(ctx context.Context, skipUnsupported bool, out string)
 	if err := d.applyJSONEdits(p); err != nil {
 		return err
 	}
+	if err := d.registerBlobs(p); err != nil {
+		return err
+	}
 
 	cleanPD, err := ensureCleanPD(d.cfg)
 	if err != nil {

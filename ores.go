@@ -6,12 +6,13 @@ import (
 	"errors"
 )
 
-// ORES resources: the unlockables list (a JSON string) and the contracts
-// table (contract ID -> resource), both small BIN1 files.
+// ORES resources: the unlockables list (a JSON string), and the contracts
+// and blobs tables (name -> resource), all small BIN1 files.
 
 const (
 	unlockablesORES = 0x0057C2C3941115CA
 	contractsORES   = 0x002B07020D21D727
+	blobsORES       = 0x00858D45F5F9E3CA // blob path -> resource
 	bin1Relocations = 0x12EBA5ED
 	zstringStatic   = 0x40000000
 )
@@ -84,12 +85,12 @@ func buildUnlockablesORES(json []byte) []byte {
 	return bin1File(d, []uint32{8})
 }
 
-type contractEntry struct {
+type nameEntry struct {
 	id   string
 	hash uint64
 }
 
-func parseContractsORES(b []byte) ([]contractEntry, error) {
+func parseNameTable(b []byte) ([]nameEntry, error) {
 	d, err := bin1Data(b)
 	if err != nil {
 		return nil, err
@@ -101,19 +102,19 @@ func parseContractsORES(b []byte) ([]contractEntry, error) {
 	if begin > end || end > len(d) || (end-begin)%24 != 0 {
 		return nil, errors.New("contracts ORES array out of range")
 	}
-	var out []contractEntry
+	var out []nameEntry
 	for at := begin; at < end; at += 24 {
 		id, err := zstringAt(d, at)
 		if err != nil {
 			return nil, err
 		}
 		hi, lo := binary.LittleEndian.Uint32(d[at+16:]), binary.LittleEndian.Uint32(d[at+20:])
-		out = append(out, contractEntry{id, uint64(hi)<<32 | uint64(lo)})
+		out = append(out, nameEntry{id, uint64(hi)<<32 | uint64(lo)})
 	}
 	return out, nil
 }
 
-func buildContractsORES(entries []contractEntry) []byte {
+func buildNameTable(entries []nameEntry) []byte {
 	const head = 0x20 // array pointers, padding and the element count
 	strs := head + 24*len(entries)
 	var buf bytes.Buffer

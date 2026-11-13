@@ -28,6 +28,7 @@ type Plan struct {
 	Textures  []*textureJob             // built at deploy time into resources already placed
 	Loc       []locEdit                 // strings to set in LOCRs
 	JSONEdits []*jsonEdit               // unlockables, contracts and JSON patches, in order
+	Blobs     []blob                    // online resources to register
 	PD        []PDChange                // packagedefinition changes
 	Thumbs    []string                  // lines for thumbs.dat's [Hitman5] section
 	Notes     []string                  // option reconciliation and similar
@@ -188,6 +189,11 @@ func (p *Plan) addMod(m *Mod, selected []string) error {
 		}
 		for _, f := range c.ContentFolders {
 			if err := p.addContentFolder(m, filepath.Join(m.Path, filepath.FromSlash(f))); err != nil {
+				return err
+			}
+		}
+		for _, f := range c.BlobsFolders {
+			if err := p.addBlobsFolder(filepath.Join(m.Path, filepath.FromSlash(f))); err != nil && !errors.Is(err, fs.ErrNotExist) {
 				return err
 			}
 		}

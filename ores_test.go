@@ -31,11 +31,11 @@ func TestGameORESRoundTrip(t *testing.T) {
 		t.Error("unlockables ORES does not round trip")
 	}
 	c := data(contractsORES)
-	entries, err := parseContractsORES(c)
+	entries, err := parseNameTable(c)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(buildContractsORES(entries), c) {
+	if !bytes.Equal(buildNameTable(entries), c) {
 		t.Error("contracts ORES does not round trip")
 	}
 	t.Logf("%d bytes of unlockables JSON, %d contracts", len(j), len(entries))
