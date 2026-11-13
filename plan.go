@@ -106,7 +106,7 @@ func buildPlan(cfg *Config, game *gameData, strict bool) (*Plan, error) {
 		}
 	}
 	p.condVars = map[string]any{"config": map[string]any{
-		"loadOrder": loadOrder, "modOptions": modOptions, "platform": "steam",
+		"loadOrder": loadOrder, "modOptions": modOptions, "platform": platform,
 	}}
 	for _, dir := range cfg.Enabled {
 		i := slices.IndexFunc(mods, func(m *Mod) bool { return m.Dir == dir })
@@ -134,19 +134,23 @@ func buildPlan(cfg *Config, game *gameData, strict bool) (*Plan, error) {
 	return p, nil
 }
 
-// put places a resource in a chunk's output.
-// checkRelations notes required mods that aren't enabled and incompatible
-// ones that are.
+// checkRelations notes required mods that aren't enabled, incompatible ones
+// that are, and mods made for another platform.
 func (p *Plan) checkRelations(m *Mod, selected []string, enabled map[string]bool) {
 	if m.Manifest == nil {
 		return
 	}
+	var platforms []string
 	for _, c := range m.Manifest.content(selected, p.condVars) {
 		for _, r := range c.Requirements {
 			if !enabled[strings.ToLower(r)] {
 				p.Notes = append(p.Notes, fmt.Sprintf("%s: requires %s, which is not enabled", m.Dir, r))
 			}
 		}
+		platforms = append(platforms, c.SupportedPlatforms...)
+	}
+	if len(platforms) > 0 && !slices.Contains(platforms, platform) {
+		p.Notes = append(p.Notes, fmt.Sprintf("%s: only supports %s", m.Dir, strings.Join(platforms, ", ")))
 	}
 	for _, r := range m.Manifest.Incompatibilities {
 		if enabled[strings.ToLower(r)] {
@@ -155,6 +159,7 @@ func (p *Plan) checkRelations(m *Mod, selected []string, enabled map[string]bool
 	}
 }
 
+// put places a resource in a chunk's output.
 func (p *Plan) put(chunk int, r *Resource) {
 	if p.Chunks[chunk] == nil {
 		p.Chunks[chunk] = map[uint64]*Resource{}

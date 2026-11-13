@@ -55,13 +55,14 @@ type Manifest struct {
 }
 
 type ManifestContent struct {
-	ContentFolders    []string     `json:"contentFolders"`
-	Dependencies      []Dependency `json:"dependencies"`
-	Scripts           []string     `json:"scripts"`
-	Packagedefinition []PDChange   `json:"packagedefinition"`
-	Thumbs            []string     `json:"thumbs"`
-	Requirements      []string     `json:"requirements"` // mod IDs that must be enabled
-	BlobsFolders      []string     `json:"blobsFolders"` // files served as online resources
+	ContentFolders     []string     `json:"contentFolders"`
+	Dependencies       []Dependency `json:"dependencies"`
+	Scripts            []string     `json:"scripts"`
+	Packagedefinition  []PDChange   `json:"packagedefinition"`
+	Thumbs             []string     `json:"thumbs"`
+	Requirements       []string     `json:"requirements"` // mod IDs that must be enabled
+	SupportedPlatforms []string     `json:"supportedPlatforms"`
+	BlobsFolders       []string     `json:"blobsFolders"` // files served as online resources
 
 	// Localisation is {language: {string ID: text}} for the global LOCR;
 	// LocalisationOverrides is {LOCR: {language: {decimal hash: text}}};

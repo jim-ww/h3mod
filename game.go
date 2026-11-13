@@ -13,6 +13,8 @@ const (
 	// never base game data.
 	managedPatchMin = 200
 	outputPatch     = 300
+	// platform is what SMF's config.platform would be for this install.
+	platform = "steam"
 )
 
 var archiveName = regexp.MustCompile(`^chunk(\d+)(?:patch(\d+))?\.rpkg$`)
