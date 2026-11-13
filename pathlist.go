@@ -3,13 +3,16 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
+	"strings"
 )
 
 // resolvePaths looks up resource paths for hashes in a hash_list.txt
-// ("HASH.TYPE,path" lines). Like rpkg-tool, a path is only used when it
+// ("HASH.TYPE,path" lines, optionally gzipped). Like rpkg-tool, a path is only used when it
 // hashes back to its hash.
 func resolvePaths(listPath string, want map[uint64]bool) (map[uint64]string, error) {
 	f, err := os.Open(listPath)
@@ -17,8 +20,16 @@ func resolvePaths(listPath string, want map[uint64]bool) (map[uint64]string, err
 		return nil, fmt.Errorf("hash list: %w", err)
 	}
 	defer f.Close()
+	var r io.Reader = f
+	if strings.HasSuffix(listPath, ".gz") {
+		gz, err := gzip.NewReader(f)
+		if err != nil {
+			return nil, fmt.Errorf("hash list: %w", err)
+		}
+		r = gz
+	}
 	out := make(map[uint64]string, len(want))
-	sc := bufio.NewScanner(f)
+	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 1<<20), 1<<20)
 	for sc.Scan() {
 		line := sc.Bytes()

@@ -57,6 +57,7 @@ func printSkipped(p *Plan) {
 func (d *Deployer) Deploy(ctx context.Context, skipUnsupported bool, out string) error {
 	start := time.Now()
 	if len(d.cfg.Enabled) == 0 && out == "" {
+		d.log("no mods enabled (see status), so removing deployed mods")
 		return d.Undeploy()
 	}
 	unlock, err := lockGame(d.cfg)
@@ -202,6 +203,10 @@ func (d *Deployer) buildEntities(ctx context.Context, p *Plan) error {
 	if err != nil {
 		return err
 	}
+	pathList, err := d.game.pathList()
+	if err != nil {
+		return err
+	}
 	idx, err := d.game.index()
 	if err != nil {
 		return err
@@ -209,7 +214,7 @@ func (d *Deployer) buildEntities(ctx context.Context, p *Plan) error {
 	er := &entityRunner{
 		tools:    tools,
 		idx:      idx,
-		pathList: d.game.pathList,
+		pathList: pathList,
 		cacheDir: d.cfg.abs(filepath.Join("cache", "entities")),
 		workDir:  d.cfg.abs(filepath.Join("cache", "work")),
 	}

@@ -78,18 +78,6 @@ func findTools() (Tools, error) {
 	return t, err
 }
 
-func toolPath(name string) (string, error) {
-	p, err := exec.LookPath(name)
-	if err != nil {
-		return "", fmt.Errorf("%s not found in PATH; run h3mod via `nix run` or inside `nix develop`", name)
-	}
-	// Resolved store paths identify the tool version, which keys the cache.
-	if r, err := filepath.EvalSymlinks(p); err == nil {
-		p = r
-	}
-	return p, nil
-}
-
 func (t Tools) run(ctx context.Context, dir string, name string, args ...string) error {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir

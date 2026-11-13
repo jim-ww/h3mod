@@ -64,23 +64,17 @@ func newPlan(game *gameData) *Plan {
 type gameData struct {
 	index    func() (*Index, error)
 	hashList func() (*HashList, error)
-	pathList string // hash_list.txt with resource paths
+	pathList func() (string, error) // hash_list.txt with resource paths
 }
 
 func newGameData(cfg *Config) *gameData {
-	pathList := os.Getenv("H3MOD_PATH_LIST") // set by the nix package
-	if pathList == "" {
-		pathList = filepath.Join(cfg.abs(cfg.Game), "SMF", "Third-Party", "hash_list.txt")
-	}
 	return &gameData{
-		pathList: pathList,
+		pathList: func() (string, error) { return dataFile(cfg, "H3MOD_PATH_LIST", "hash_list.txt") },
 		index:    sync.OnceValues(func() (*Index, error) { return loadIndex(cfg.runtimeDir()) }),
 		hashList: sync.OnceValues(func() (*HashList, error) {
-			// The nix package points H3MOD_HASH_LIST at a pinned hash list;
-			// SMF ships the same file.
-			path := os.Getenv("H3MOD_HASH_LIST")
-			if path == "" {
-				path = filepath.Join(cfg.abs(cfg.Game), "SMF", "Third-Party", "hash_list.hmla")
+			path, err := dataFile(cfg, "H3MOD_HASH_LIST", "hash_list.hmla")
+			if err != nil {
+				return nil, err
 			}
 			return loadHashList(path)
 		}),
@@ -88,8 +82,8 @@ func newGameData(cfg *Config) *gameData {
 }
 
 // buildPlan collects the enabled mods in load order, skipping mods whose
-// folders are gone. For a deploy, those are also dropped from the load order
-// and it is sorted by the mods' rules; p.Reordered says cfg changed.
+// folders are gone. For a deploy, the load order is first sorted by the
+// mods' rules; p.Reordered says cfg changed.
 func buildPlan(cfg *Config, game *gameData, deploying bool) (*Plan, error) {
 	mods, err := discoverMods(cfg.abs(cfg.Mods))
 	if err != nil {
@@ -111,18 +105,6 @@ func buildPlan(cfg *Config, game *gameData, deploying bool) (*Plan, error) {
 		"loadOrder": loadOrder, "modOptions": modOptions, "platform": platform,
 	}}
 	if deploying {
-		var gone []string
-		cfg.Enabled = slices.DeleteFunc(cfg.Enabled, func(dir string) bool {
-			if slices.ContainsFunc(mods, func(m *Mod) bool { return m.Dir == dir }) {
-				return false
-			}
-			gone = append(gone, dir)
-			return true
-		})
-		if len(gone) > 0 {
-			p.Reordered = true
-			p.Notes = append(p.Notes, "removed from the load order, folder is gone: "+strings.Join(gone, ", "))
-		}
 		order, err := sortLoadOrder(cfg, mods, p.condVars)
 		if err != nil {
 			return nil, err
