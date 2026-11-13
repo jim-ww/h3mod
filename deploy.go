@@ -59,6 +59,11 @@ func (d *Deployer) Deploy(ctx context.Context, skipUnsupported bool, out string)
 	if len(d.cfg.Enabled) == 0 && out == "" {
 		return d.Undeploy()
 	}
+	unlock, err := lockGame(d.cfg)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	p, err := buildPlan(d.cfg, d.game, true)
 	if err != nil {
 		return err
@@ -125,7 +130,7 @@ func (d *Deployer) Deploy(ctx context.Context, skipUnsupported bool, out string)
 	// Each rename is atomic; packagedefinition goes last so the game only
 	// loads patch archives once all of them are in place.
 	for _, name := range staged {
-		if err := os.Rename(filepath.Join(dst, name+tmpSuffix), filepath.Join(dst, name)); err != nil {
+		if err := renameDurable(filepath.Join(dst, name+tmpSuffix), filepath.Join(dst, name)); err != nil {
 			return err
 		}
 	}
@@ -205,6 +210,11 @@ func (d *Deployer) patchRepository(p *Plan) error {
 
 // Undeploy restores vanilla game files.
 func (d *Deployer) Undeploy() error {
+	unlock, err := lockGame(d.cfg)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	runtime := d.cfg.runtimeDir()
 	cleanPD, err := ensureCleanPD(d.cfg)
 	if err != nil {
