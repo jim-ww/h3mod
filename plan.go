@@ -286,6 +286,14 @@ func (p *Plan) addContentFile(m *Mod, chunk int, path string) error {
 			return err
 		}
 		p.add(chunk, r)
+	case strings.HasSuffix(lower, ".material.json"):
+		res, err := buildMaterial(path)
+		if err != nil {
+			return err
+		}
+		for _, r := range res {
+			p.add(chunk, r)
+		}
 	case strings.HasSuffix(lower, ".texture.tga"):
 		j, err := newTextureJob(path)
 		if err != nil {
@@ -316,7 +324,7 @@ func (p *Plan) addContentFile(m *Mod, chunk int, path string) error {
 
 // specialFiles are SMF content types h3mod doesn't convert yet.
 var specialFiles = []string{
-	"unlockables.json", "contract.json", "json.patch.json", "material.json",
+	"unlockables.json", "contract.json", "json.patch.json",
 	"sfx.wem", "delta", "clng.json", "ditl.json",
 	"locr.json", "rtlv.json",
 }
