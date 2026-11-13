@@ -38,6 +38,7 @@ type Plan struct {
 	Skipped   map[string]map[string]int // mod -> unsupported feature -> count
 	Reordered bool                      // cfg.Enabled changed and needs saving
 	Server    serverState               // what Peacock reads from the deploy summary
+	Retail    map[string]string         // files for Retail/mods: path there -> source
 
 	entity   map[uint64]*entityJob // by TEMP hash
 	wwev     map[uint64]*wwevJob   // by WWEV hash
@@ -624,13 +625,17 @@ func (p *Plan) addScript(m *Mod, path string, selected []string) error {
 		return err
 	}
 	p.fallback = append(p.fallback, res...)
+	// It also copies retail/ and the folders of selected content options
+	// into Retail/mods.
+	if err := p.addRetailDir(filepath.Join(filepath.Dir(path), "retail")); err != nil {
+		return err
+	}
 	for _, k := range selected {
 		if strings.HasSuffix(k, "(ModJPFilesContent)") {
-			p.skip(m.Dir, "ModJPFiles retail content")
+			if err := p.addRetailDir(filepath.Join(filepath.Dir(path), jpContentDir(k))); err != nil {
+				return err
+			}
 		}
-	}
-	if _, err := os.Stat(filepath.Join(filepath.Dir(path), "retail")); err == nil {
-		p.skip(m.Dir, "ModJPFiles retail content")
 	}
 	return nil
 }

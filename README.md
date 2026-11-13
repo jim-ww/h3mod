@@ -91,7 +91,8 @@ and empty choice groups fall back to theirs; each change is reported.
 - `dlge.json`, `locr.json`, `ditl.json`, `clng.json`, `rtlv.json`, manifest
   localisation and localised lines
 - manifest `dependencies`, `packagedefinition`, `thumbs`, and the standard
-  ModJPFiles script
+  ModJPFiles script, including its files for `Retail/mods` (h3mod tracks
+  the files it places there and removes only those)
 - `skipIntro` in the config skips the intro
 
 - contracts added to the Destinations menu (`SMF.destinations`)

@@ -19,6 +19,7 @@ type State struct {
 	Deployed time.Time         `json:"deployed,omitzero"`
 	Mods     []string          `json:"mods,omitempty"`
 	Archives map[string]Output `json:"archives,omitempty"` // by file name in Runtime
+	Retail   map[string]string `json:"retail,omitempty"`   // files placed in Retail/mods -> sha256
 }
 
 type Output struct {

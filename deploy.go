@@ -192,6 +192,19 @@ func (d *Deployer) Deploy(ctx context.Context, skipUnsupported bool, out string)
 	if err := writeDeploySummary(d.cfg, p, summary); err != nil {
 		return fmt.Errorf("deploy summary for Peacock: %w", err)
 	}
+	retail, placed := filepath.Join(d.cfg.abs(d.cfg.Game), "Retail", "mods"), state.Retail
+	if out != "" {
+		retail, placed = filepath.Join(out, "Retail", "mods"), nil
+	}
+	nowRetail, err := syncRetail(retail, p.Retail, placed, d.log)
+	if out == "" {
+		state.Retail = nowRetail
+		if err != nil {
+			return errors.Join(err, state.save(d.statePath()))
+		}
+	} else if err != nil {
+		return err
+	}
 	if out == "" {
 		state.Deployed, state.Mods, state.Archives = time.Now(), slices.Clone(d.cfg.Enabled), next
 		if err := state.save(d.statePath()); err != nil {
@@ -404,6 +417,14 @@ func (d *Deployer) Undeploy() error {
 	}
 	if err := removeDeploySummary(summaryPath(d.cfg)); err != nil {
 		return err
+	}
+	state, err := loadState(d.statePath())
+	if err != nil {
+		return err
+	}
+	left, err := syncRetail(filepath.Join(d.cfg.abs(d.cfg.Game), "Retail", "mods"), nil, state.Retail, d.log)
+	if err != nil {
+		return errors.Join(err, (&State{Retail: left}).save(d.statePath()))
 	}
 	if err := (&State{}).save(d.statePath()); err != nil {
 		return err
