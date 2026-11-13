@@ -41,8 +41,14 @@ func parseHash(s string) (uint64, error) {
 	if !strings.ContainsAny(s, ":[") {
 		return 0, fmt.Errorf("invalid hash %q", s)
 	}
+	return ioiHash(s), nil
+}
+
+// ioiHash is the game's resource hash: md5 of the lowercase string, top
+// byte cleared.
+func ioiHash(s string) uint64 {
 	sum := md5.Sum([]byte(strings.ToLower(s)))
-	return binary.BigEndian.Uint64(sum[:8]) & 0x00FFFFFFFFFFFFFF, nil
+	return binary.BigEndian.Uint64(sum[:8]) & 0x00FFFFFFFFFFFFFF
 }
 
 // encodeMetaJSON writes references by path where names has one, as

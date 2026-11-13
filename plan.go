@@ -22,15 +22,16 @@ var (
 
 // Plan is everything a deploy writes, collected from mods in load order.
 type Plan struct {
-	Chunks   map[int]map[uint64]*Resource
-	Repo     []*node
-	Entities []*entityJob
-	Textures []*textureJob             // built at deploy time into resources already placed
-	Loc      []locEdit                 // strings to set in LOCRs
-	PD       []PDChange                // packagedefinition changes
-	Thumbs   []string                  // lines for thumbs.dat's [Hitman5] section
-	Notes    []string                  // option reconciliation and similar
-	Skipped  map[string]map[string]int // mod -> unsupported feature -> count
+	Chunks    map[int]map[uint64]*Resource
+	Repo      []*node
+	Entities  []*entityJob
+	Textures  []*textureJob             // built at deploy time into resources already placed
+	Loc       []locEdit                 // strings to set in LOCRs
+	JSONEdits []*jsonEdit               // unlockables, contracts and JSON patches, in order
+	PD        []PDChange                // packagedefinition changes
+	Thumbs    []string                  // lines for thumbs.dat's [Hitman5] section
+	Notes     []string                  // option reconciliation and similar
+	Skipped   map[string]map[string]int // mod -> unsupported feature -> count
 
 	entity   map[uint64]*entityJob // by TEMP hash
 	fallback []placed              // added only where nothing else is
@@ -362,6 +363,20 @@ func (p *Plan) addContentFile(m *Mod, chunk int, path string) error {
 			return err
 		}
 		p.add(chunk, r)
+	case strings.HasSuffix(lower, ".unlockables.json"), strings.HasSuffix(lower, ".contract.json"),
+		strings.HasSuffix(lower, ".json.patch.json"):
+		kind := "unlockables"
+		switch {
+		case strings.HasSuffix(lower, ".contract.json"):
+			kind = "contract"
+		case strings.HasSuffix(lower, ".json.patch.json"):
+			kind = "patch"
+		}
+		e, err := readJSONEdit(path, kind)
+		if err != nil {
+			return err
+		}
+		p.JSONEdits = append(p.JSONEdits, e)
 	case strings.HasSuffix(lower, ".material.json"):
 		res, err := buildMaterial(path)
 		if err != nil {
@@ -400,7 +415,6 @@ func (p *Plan) addContentFile(m *Mod, chunk int, path string) error {
 
 // specialFiles are SMF content types h3mod doesn't convert yet.
 var specialFiles = []string{
-	"unlockables.json", "contract.json", "json.patch.json",
 	"sfx.wem", "delta", "rtlv.json",
 }
 
