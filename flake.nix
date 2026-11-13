@@ -61,6 +61,15 @@
           runHook postInstall
         '';
       };
+
+      # Resource paths by hash, version 381 like SMF ships. rpkg-tool names
+      # entity references by path from this list, and mods' patches expect it.
+      path-list = pkgs.runCommand "hitman-hash-list-381" { nativeBuildInputs = [ pkgs.p7zip ]; } ''
+        7z e -o$out ${pkgs.fetchurl {
+          url = "https://github.com/glacier-modding/Hitman-Hashes/releases/download/v381/latest-hashes.7z";
+          hash = "sha256-95C268G6KjhHfHFRFqEsnGIuETn/6fZ6lDQHCDjgdrY=";
+        }} hash_list.txt
+      '';
     in
     {
       packages.${system} = {
@@ -75,7 +84,8 @@
           postInstall = ''
             wrapProgram $out/bin/h3mod \
               --prefix PATH : ${pkgs.lib.makeBinPath [ quickentity resourcetool ]} \
-              --set-default H3MOD_HASH_LIST ${hash-list}
+              --set-default H3MOD_HASH_LIST ${hash-list} \
+              --set-default H3MOD_PATH_LIST ${path-list}/hash_list.txt
           '';
         };
       };
@@ -83,6 +93,7 @@
       devShells.${system}.default = pkgs.mkShell {
         packages = [ pkgs.go quickentity resourcetool ];
         H3MOD_HASH_LIST = "${hash-list}";
+        H3MOD_PATH_LIST = "${path-list}/hash_list.txt";
       };
     };
 }

@@ -13,7 +13,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
+	"sync"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -104,11 +106,32 @@ func (t Tools) run(ctx context.Context, dir string, name string, args ...string)
 type entityRunner struct {
 	tools    Tools
 	idx      *Index
+	pathList string // hash_list.txt naming references, as SMF's rpkg-tool does
 	cacheDir string // finished entities, by input hash
 	workDir  string // scratch space for running jobs
+
+	names func() (map[uint64]string, error) // paths for all jobs' references
 }
 
 func (er *entityRunner) runAll(ctx context.Context, jobs []*entityJob) ([][2]*Resource, error) {
+	// Resolving paths scans the whole hash list, so it happens once, and only
+	// when some entity isn't cached.
+	er.names = sync.OnceValues(func() (map[uint64]string, error) {
+		want := map[uint64]bool{}
+		for _, j := range jobs {
+			if j.qn != "" {
+				continue
+			}
+			temp, tblu, err := er.base(j)
+			if err != nil {
+				return nil, err
+			}
+			for _, r := range append(slices.Clone(temp.Refs), tblu.Refs...) {
+				want[r.Hash] = true
+			}
+		}
+		return resolvePaths(er.pathList, want)
+	})
 	out := make([][2]*Resource, len(jobs))
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(runtime.NumCPU())
@@ -194,8 +217,12 @@ func (er *entityRunner) build(ctx context.Context, work string, j *entityJob, te
 			return err
 		}
 	} else {
+		names, err := er.names()
+		if err != nil {
+			return err
+		}
 		for _, r := range []*Resource{temp, tblu} {
-			if err := writeEntityInput(work, r); err != nil {
+			if err := writeEntityInput(work, r, names); err != nil {
 				return err
 			}
 		}
@@ -238,12 +265,12 @@ func (er *entityRunner) build(ctx context.Context, work string, j *entityJob, te
 	return nil
 }
 
-func writeEntityInput(dir string, r *Resource) error {
+func writeEntityInput(dir string, r *Resource, names map[uint64]string) error {
 	data, err := r.Data()
 	if err != nil {
 		return err
 	}
-	meta, err := encodeMetaJSON(r)
+	meta, err := encodeMetaJSON(r, names)
 	if err != nil {
 		return err
 	}
@@ -307,7 +334,10 @@ func storeEntity(work, dst string) error {
 // cacheKey hashes everything an entity build depends on.
 func (er *entityRunner) cacheKey(j *entityJob, temp, tblu *Resource) (string, error) {
 	h := sha256.New()
-	fmt.Fprintf(h, "h3mod entity v1\n%s\n%s\n%016X %016X\n", er.tools.ResourceTool, er.tools.QuickEntity, j.temp, j.tblu)
+	fmt.Fprintf(h, "h3mod entity v2\n%s\n%s\n%016X %016X\n", er.tools.ResourceTool, er.tools.QuickEntity, j.temp, j.tblu)
+	if st, err := os.Stat(er.pathList); err == nil {
+		fmt.Fprintf(h, "%s %d %d\n", er.pathList, st.Size(), st.ModTime().UnixNano())
+	}
 	if j.qn != "" {
 		b, err := os.ReadFile(j.qn)
 		if err != nil {
@@ -320,7 +350,7 @@ func (er *entityRunner) cacheKey(j *entityJob, temp, tblu *Resource) (string, er
 			if err != nil {
 				return "", err
 			}
-			meta, err := encodeMetaJSON(r)
+			meta, err := encodeMetaJSON(r, nil)
 			if err != nil {
 				return "", err
 			}

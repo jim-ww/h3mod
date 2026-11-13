@@ -16,6 +16,8 @@ CXX='g++'
 export CXX
 H3MOD_HASH_LIST='/nix/store/b796ghh4dwyxnsr4ri0b2ch4jb99gj7w-source'
 export H3MOD_HASH_LIST
+H3MOD_PATH_LIST='/nix/store/jrjc31c3kfbyzcv85ixbypg1g0z7i6nn-hitman-hash-list-381/hash_list.txt'
+export H3MOD_PATH_LIST
 HOSTTYPE='x86_64'
 HOST_PATH='/nix/store/a50ml7za6h61m4mv4cdbvkl33c6sx5yn-coreutils-9.12/bin:/nix/store/5zsc280i2i7bqgjn7kln87w1ss6li22f-findutils-4.11.0/bin:/nix/store/4ar4316ix4npp991142wq8x5i129c7pd-diffutils-3.12/bin:/nix/store/x275j18p7dx6kv7vfj45saapbhbljia4-gnused-4.10/bin:/nix/store/5sgjjiqn90zmvlvlgadw7ss00nn3hpjb-gnugrep-3.12/bin:/nix/store/6jw5614njszmn5v325j9lq1fwp4p6lyx-gawk-5.4.1/bin:/nix/store/7g2i4irm3d2yvbwan7c3gr4pkgwc313p-gnutar-1.35/bin:/nix/store/pd6kmgkpz1bmpck9sc2yr520hmvrzm1l-gzip-1.15/bin:/nix/store/ic27066xy2xgdddziwnnh7kl6gx25mps-bzip2-1.0.8-bin/bin:/nix/store/xajdnxzflx2calfnqvvjh5zb6lmmjiaa-gnumake-4.4.1/bin:/nix/store/hasnvc0j36gg6qrdsfcx7yivx3c2bpqr-bash-5.3p20/bin:/nix/store/jjx4z5lamb00psmiyag0fqmc8gy2i640-patch-2.8.1/bin:/nix/store/6mm66zaj29q72pcax4xhzgh4vwp6qy0y-xz-5.8.4-bin/bin:/nix/store/4d81lw0vjpxpaf3d5shahwp2a3hs446s-file-5.48/bin'
 export HOST_PATH
@@ -37,7 +39,7 @@ NIX_CC='/nix/store/ii6p6kc1brz3vycqg88q4zb4xd2dmqwp-gcc-wrapper-16.2.0'
 export NIX_CC
 NIX_CC_WRAPPER_TARGET_HOST_x86_64_unknown_linux_gnu='1'
 export NIX_CC_WRAPPER_TARGET_HOST_x86_64_unknown_linux_gnu
-NIX_CFLAGS_COMPILE=' -frandom-seed=bz55fp5nyg'
+NIX_CFLAGS_COMPILE=' -frandom-seed=06dcqwpjwx'
 export NIX_CFLAGS_COMPILE
 NIX_ENFORCE_NO_NATIVE='1'
 export NIX_ENFORCE_NO_NATIVE

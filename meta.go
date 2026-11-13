@@ -45,7 +45,9 @@ func parseHash(s string) (uint64, error) {
 	return binary.BigEndian.Uint64(sum[:8]) & 0x00FFFFFFFFFFFFFF, nil
 }
 
-func encodeMetaJSON(r *Resource) ([]byte, error) {
+// encodeMetaJSON writes references by path where names has one, as
+// rpkg-tool's hash_meta_to_json does, and by hash otherwise.
+func encodeMetaJSON(r *Resource, names map[uint64]string) ([]byte, error) {
 	m := metaJSON{
 		HashValue:          hashString(r.Hash),
 		HashResourceType:   r.Type,
@@ -56,7 +58,11 @@ func encodeMetaJSON(r *Resource) ([]byte, error) {
 		References:         make([]metaRef, len(r.Refs)),
 	}
 	for i, ref := range r.Refs {
-		m.References[i] = metaRef{Hash: hashString(ref.Hash), Flag: fmt.Sprintf("%02X", ref.Flag)}
+		name, ok := names[ref.Hash]
+		if !ok {
+			name = hashString(ref.Hash)
+		}
+		m.References[i] = metaRef{Hash: name, Flag: fmt.Sprintf("%02X", ref.Flag)}
 	}
 	return json.Marshal(m)
 }

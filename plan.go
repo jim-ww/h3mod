@@ -54,11 +54,17 @@ func newPlan(game *gameData) *Plan {
 type gameData struct {
 	index    func() (*Index, error)
 	hashList func() (*HashList, error)
+	pathList string // hash_list.txt with resource paths
 }
 
 func newGameData(cfg *Config) *gameData {
+	pathList := os.Getenv("H3MOD_PATH_LIST") // set by the nix package
+	if pathList == "" {
+		pathList = filepath.Join(cfg.abs(cfg.Game), "SMF", "Third-Party", "hash_list.txt")
+	}
 	return &gameData{
-		index: sync.OnceValues(func() (*Index, error) { return loadIndex(cfg.runtimeDir()) }),
+		pathList: pathList,
+		index:    sync.OnceValues(func() (*Index, error) { return loadIndex(cfg.runtimeDir()) }),
 		hashList: sync.OnceValues(func() (*HashList, error) {
 			// The nix package points H3MOD_HASH_LIST at a pinned hash list;
 			// SMF ships the same file.

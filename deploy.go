@@ -186,6 +186,7 @@ func (d *Deployer) buildEntities(ctx context.Context, p *Plan) error {
 	er := &entityRunner{
 		tools:    tools,
 		idx:      idx,
+		pathList: d.game.pathList,
 		cacheDir: d.cfg.abs(filepath.Join("cache", "entities")),
 		workDir:  d.cfg.abs(filepath.Join("cache", "work")),
 	}

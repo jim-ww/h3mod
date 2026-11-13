@@ -28,7 +28,7 @@ mods:
   move <mod> <position>        move a mod in the load order (later wins)
 
 options:
-  options <mod>                list a mod's options and which are selected
+  options [mod]                mods with options, or one mod's options
   option <mod> <option> [on|off]
                                select an option ("Group:Name" for choices)
   reset-options <mod>          go back to the mod's defaults
@@ -186,9 +186,43 @@ func move(cfg *Config, args []string) error {
 	return cfg.save()
 }
 
+// listModsWithOptions prints mods that have options, shell-quoted for
+// pasting into `h3mod option`.
+func listModsWithOptions(cfg *Config) error {
+	mods, err := discoverMods(cfg.abs(cfg.Mods))
+	if err != nil {
+		return err
+	}
+	for _, m := range mods {
+		if m.Manifest == nil {
+			continue
+		}
+		if n := len(m.Manifest.optionKeys()); n > 0 {
+			state := ""
+			if !cfg.isEnabled(m.Dir) {
+				state = " (disabled)"
+			}
+			fmt.Printf("%-45s %2d options%s\n", shellQuote(m.Dir), n, state)
+		}
+	}
+	return nil
+}
+
+func shellQuote(s string) string {
+	if s != "" && strings.IndexFunc(s, func(r rune) bool {
+		return !(r == '-' || r == '_' || r == '.' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z')
+	}) < 0 {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
 func listOptions(cfg *Config, args []string) error {
+	if len(args) == 0 {
+		return listModsWithOptions(cfg)
+	}
 	if len(args) != 1 {
-		return errors.New("usage: options <mod>")
+		return errors.New("usage: options [mod]")
 	}
 	m, err := loadMod(cfg, args[0])
 	if err != nil {
@@ -237,7 +271,13 @@ func listOptions(cfg *Config, args []string) error {
 }
 
 func setOption(cfg *Config, args []string) error {
-	if len(args) < 2 || len(args) > 3 {
+	if len(args) == 0 {
+		return listModsWithOptions(cfg)
+	}
+	if len(args) == 1 {
+		return listOptions(cfg, args)
+	}
+	if len(args) > 3 {
 		return errors.New("usage: option <mod> <option> [on|off]")
 	}
 	m, err := loadMod(cfg, args[0])
