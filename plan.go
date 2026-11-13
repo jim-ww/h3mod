@@ -26,6 +26,8 @@ type Plan struct {
 	Repo     []*node
 	Entities []*entityJob
 	Textures []*textureJob             // built at deploy time into resources already placed
+	PD       []PDChange                // packagedefinition changes
+	Thumbs   []string                  // lines for thumbs.dat's [Hitman5] section
 	Notes    []string                  // option reconciliation and similar
 	Skipped  map[string]map[string]int // mod -> unsupported feature -> count
 
@@ -77,6 +79,12 @@ func buildPlan(cfg *Config, game *gameData, strict bool) (*Plan, error) {
 		return nil, err
 	}
 	p := newPlan(game)
+	enabled := map[string]bool{}
+	for _, dir := range cfg.Enabled {
+		if m := findMod(mods, dir); m != nil {
+			enabled[strings.ToLower(m.ID())] = true
+		}
+	}
 	for _, dir := range cfg.Enabled {
 		i := slices.IndexFunc(mods, func(m *Mod) bool { return m.Dir == dir })
 		if i < 0 {
@@ -90,6 +98,7 @@ func buildPlan(cfg *Config, game *gameData, strict bool) (*Plan, error) {
 		for _, n := range notes {
 			p.Notes = append(p.Notes, m.Dir+": "+n)
 		}
+		p.checkRelations(m, sel, enabled)
 		if err := p.addMod(m, sel); err != nil {
 			return nil, fmt.Errorf("%s: %w", m.Dir, err)
 		}
@@ -103,6 +112,26 @@ func buildPlan(cfg *Config, game *gameData, strict bool) (*Plan, error) {
 }
 
 // put places a resource in a chunk's output.
+// checkRelations notes required mods that aren't enabled and incompatible
+// ones that are.
+func (p *Plan) checkRelations(m *Mod, selected []string, enabled map[string]bool) {
+	if m.Manifest == nil {
+		return
+	}
+	for _, c := range m.Manifest.content(selected) {
+		for _, r := range c.Requirements {
+			if !enabled[strings.ToLower(r)] {
+				p.Notes = append(p.Notes, fmt.Sprintf("%s: requires %s, which is not enabled", m.Dir, r))
+			}
+		}
+	}
+	for _, r := range m.Manifest.Incompatibilities {
+		if enabled[strings.ToLower(r)] {
+			p.Notes = append(p.Notes, fmt.Sprintf("%s: incompatible with enabled %s", m.Dir, r))
+		}
+	}
+}
+
 func (p *Plan) put(chunk int, r *Resource) {
 	if p.Chunks[chunk] == nil {
 		p.Chunks[chunk] = map[uint64]*Resource{}
@@ -166,6 +195,8 @@ func (p *Plan) addMod(m *Mod, selected []string) error {
 				return err
 			}
 		}
+		p.PD = append(p.PD, c.Packagedefinition...)
+		p.Thumbs = append(p.Thumbs, c.Thumbs...)
 	}
 	return nil
 }

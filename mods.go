@@ -49,13 +49,18 @@ type Manifest struct {
 	Name    string   `json:"name"`
 	Version string   `json:"version"`
 	Options []Option `json:"options"`
+	// Incompatibilities are mod IDs that must not be enabled alongside.
+	Incompatibilities []string `json:"incompatibilities"`
 	ManifestContent
 }
 
 type ManifestContent struct {
-	ContentFolders []string     `json:"contentFolders"`
-	Dependencies   []Dependency `json:"dependencies"`
-	Scripts        []string     `json:"scripts"`
+	ContentFolders    []string     `json:"contentFolders"`
+	Dependencies      []Dependency `json:"dependencies"`
+	Scripts           []string     `json:"scripts"`
+	Packagedefinition []PDChange   `json:"packagedefinition"`
+	Thumbs            []string     `json:"thumbs"`
+	Requirements      []string     `json:"requirements"` // mod IDs that must be enabled
 
 	unsupported []string
 }
@@ -123,7 +128,7 @@ func (d Dependency) expand() []Dependency {
 // SMF manifest features h3mod doesn't implement yet.
 var unsupportedKeys = []string{
 	"blobsFolders", "localisation", "localisationOverrides", "localisedLines",
-	"packagedefinition", "thumbs", "peacockPlugins",
+	"peacockPlugins",
 }
 
 func discoverMods(dir string) ([]*Mod, error) {

@@ -145,8 +145,21 @@ func (d *Deployer) Deploy(ctx context.Context, skipUnsupported bool, out string)
 		return fmt.Errorf("clean packagedefinition: %w", err)
 	}
 	plain = patchLevel.ReplaceAll(plain, moddedPD)
+	if plain, err = applyPD(plain, p.PD); err != nil {
+		return err
+	}
 	if err := writeFileAtomic(filepath.Join(dst, "packagedefinition.txt"), encryptPD(plain)); err != nil {
 		return err
+	}
+	if out == "" {
+		if d.cfg.SkipIntro || len(p.Thumbs) > 0 {
+			err = writeThumbs(d.cfg, d.cfg.SkipIntro, p.Thumbs)
+		} else {
+			err = restoreThumbs(d.cfg)
+		}
+		if err != nil {
+			return err
+		}
 	}
 	if out == "" {
 		state.Deployed, state.Mods, state.Archives = time.Now(), slices.Clone(d.cfg.Enabled), next
@@ -251,6 +264,9 @@ func (d *Deployer) Undeploy() error {
 		return err
 	}
 	if err := removeOutputs(runtime, nil); err != nil {
+		return err
+	}
+	if err := restoreThumbs(d.cfg); err != nil {
 		return err
 	}
 	if err := (&State{}).save(d.statePath()); err != nil {

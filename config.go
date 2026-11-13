@@ -14,6 +14,9 @@ type Config struct {
 	Mods    string                 `json:"mods"`
 	Enabled []string               `json:"enabled"`           // mod folder names in load order; later ones win
 	Options map[string]*ModOptions `json:"options,omitempty"` // by mod folder
+	// SkipIntro starts the game at the main menu, like SMF's option; it
+	// changes Retail/thumbs.dat, which undeploy restores.
+	SkipIntro bool `json:"skipIntro,omitempty"`
 
 	path string
 }
