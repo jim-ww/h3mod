@@ -23,10 +23,10 @@ const usage = `usage: h3mod [-config h3mod.json] <command> [args]
 
 mods:
   status                       list enabled and disabled mods, options, problems
-  enable <mod>...              enable mods (appended to the load order)
-  disable <mod>...             disable mods
+  enable <mod>... | all        enable mods (appended to the load order)
+  disable <mod>... | all       disable mods
   move <mod> <position>        move a mod in the load order (later wins)
-  install [-name n] [-replace] [-enable] <archive|rpkg>
+  install [-name n] [-replace] <archive|rpkg>
                                add mods from a zip/7z/rar or .rpkg to the mods dir
   updates                      check mods' update URLs for new versions
   update <mod>...              download and install new versions
@@ -42,9 +42,9 @@ deploying:
   undeploy                     restore vanilla game files
   import-smf [config.json]     take load order and options from SMF
 
-<mod> is a folder name in the mods directory or a mod ID. New folders in the
-mods directory show up as disabled; deleting a folder drops the mod from the
-load order on the next deploy.
+<mod> is a number from status, a folder name, a mod ID, or a unique part of
+a mod's name. New folders in the mods directory are enabled automatically;
+deleted ones drop out of the load order.
 `
 
 func main() {
@@ -72,10 +72,19 @@ func run(ctx context.Context, args []string) error {
 		return err
 	}
 	cmd, rest := fl.Arg(0), fl.Args()[1:]
-	switch cmd {
-	case "help":
+	if cmd == "help" {
 		fmt.Print(usage)
 		return nil
+	}
+	if cmd == "install" {
+		if err := os.MkdirAll(cfg.abs(cfg.Mods), 0o755); err != nil {
+			return err
+		}
+	}
+	if err := syncMods(cfg); err != nil {
+		return err
+	}
+	switch cmd {
 	case "status":
 		return status(cfg)
 	case "enable", "disable":
@@ -111,15 +120,21 @@ func run(ctx context.Context, args []string) error {
 	return fmt.Errorf("unknown command %q", cmd)
 }
 
+// syncMods updates the config from the mods directory and says what changed.
+func syncMods(cfg *Config) error {
+	_, notes, err := cfg.syncMods()
+	for _, n := range notes {
+		fmt.Println("note:", n)
+	}
+	return err
+}
+
 func loadMod(cfg *Config, name string) (*Mod, error) {
 	mods, err := discoverMods(cfg.abs(cfg.Mods))
 	if err != nil {
 		return nil, err
 	}
-	if m := findMod(mods, name); m != nil {
-		return m, nil
-	}
-	return nil, fmt.Errorf("no mod %q in %s", name, cfg.abs(cfg.Mods))
+	return resolveMod(cfg, mods, name)
 }
 
 func status(cfg *Config) error {
@@ -128,23 +143,16 @@ func status(cfg *Config) error {
 		return err
 	}
 	fmt.Println("enabled, in load order (later wins):")
-	for i, dir := range cfg.Enabled {
-		m := findMod(mods, dir)
-		if m == nil {
-			fmt.Printf("  %2d. %s (folder gone, dropped on deploy)\n", i+1, dir)
-			continue
+	for i, m := range listed(cfg, mods) {
+		if i == len(cfg.Enabled) {
+			fmt.Println("disabled:")
 		}
-		fmt.Printf("  %2d. %s (%s)\n", i+1, m.Title(), dir)
-		if sel, _ := cfg.selection(m); len(sel) > 0 {
+		fmt.Printf("  %2d. %s (%s)\n", i+1, m.Title(), m.Dir)
+		if sel, _ := cfg.selection(m); len(sel) > 0 && cfg.isEnabled(m.Dir) {
 			fmt.Printf("      options: %s\n", strings.Join(sel, ", "))
 		}
 	}
-	fmt.Println("disabled (h3mod enable <mod>):")
-	for _, m := range mods {
-		if !cfg.isEnabled(m.Dir) {
-			fmt.Printf("      %s (%s)\n", m.Title(), m.Dir)
-		}
-	}
+	fmt.Println("mods can be named by number, folder, ID or a unique part of the name")
 	p, err := buildPlan(cfg, newGameData(cfg), false)
 	if err != nil {
 		return err
@@ -163,18 +171,33 @@ func toggle(cfg *Config, on bool, names []string) error {
 	if len(names) == 0 {
 		return errors.New("no mods given")
 	}
+	mods, err := discoverMods(cfg.abs(cfg.Mods))
+	if err != nil {
+		return err
+	}
+	var picked []*Mod
+	if len(names) == 1 && names[0] == "all" {
+		picked = mods
+	}
+	// Resolve every name first, so numbers refer to the listing as it is.
 	for _, n := range names {
-		m, err := loadMod(cfg, n)
-		switch {
-		case err != nil && on:
+		if picked != nil && n == "all" {
+			break
+		}
+		m, err := resolveMod(cfg, mods, n)
+		if err != nil {
 			return err
-		case err != nil:
-			// Allow disabling a folder that no longer exists.
-			cfg.Enabled = slices.DeleteFunc(cfg.Enabled, func(e string) bool { return strings.EqualFold(e, n) })
+		}
+		picked = append(picked, m)
+	}
+	for _, m := range picked {
+		switch {
 		case on && !cfg.isEnabled(m.Dir):
 			cfg.Enabled = append(cfg.Enabled, m.Dir)
-		case !on:
+			fmt.Println("enabled", m.Dir)
+		case !on && cfg.isEnabled(m.Dir):
 			cfg.Enabled = slices.DeleteFunc(cfg.Enabled, func(e string) bool { return e == m.Dir })
+			fmt.Println("disabled", m.Dir)
 		}
 	}
 	return cfg.save()
@@ -184,12 +207,11 @@ func installCmd(ctx context.Context, cfg *Config, args []string) error {
 	fl := flag.NewFlagSet("install", flag.ContinueOnError)
 	name := fl.String("name", "", "folder name for an rpkg mod (default: the file's name)")
 	replace := fl.Bool("replace", false, "replace mods that are already installed")
-	enable := fl.Bool("enable", false, "enable the installed mods")
 	if err := fl.Parse(args); err != nil {
 		return err
 	}
 	if fl.NArg() != 1 {
-		return errors.New("usage: install [-name n] [-replace] [-enable] <archive|rpkg>")
+		return errors.New("usage: install [-name n] [-replace] <archive|rpkg>")
 	}
 	src := fl.Arg(0)
 	if *name == "" {
@@ -198,18 +220,8 @@ func installCmd(ctx context.Context, cfg *Config, args []string) error {
 	dirs, err := installMods(ctx, cfg, src, *name, *replace, "", "")
 	for _, d := range dirs {
 		fmt.Println("installed", d)
-		if *enable && !cfg.isEnabled(d) {
-			cfg.Enabled = append(cfg.Enabled, d)
-		}
 	}
-	if err != nil {
-		return err
-	}
-	if *enable {
-		return cfg.save()
-	}
-	fmt.Println("enable with: h3mod enable <mod>")
-	return nil
+	return errors.Join(err, syncMods(cfg))
 }
 
 func updatesCmd(ctx context.Context, cfg *Config) error {

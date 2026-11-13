@@ -17,6 +17,9 @@ type Config struct {
 	// SkipIntro starts the game at the main menu, like SMF's option; it
 	// changes Retail/thumbs.dat, which undeploy restores.
 	SkipIntro bool `json:"skipIntro,omitempty"`
+	// Known are the mod folders seen so far; any other folder is new and
+	// gets enabled.
+	Known []string `json:"known"`
 
 	path string
 }
