@@ -84,6 +84,9 @@ func (d *Deployer) Deploy(ctx context.Context, skipUnsupported bool, out string)
 	if err := d.buildTextures(p); err != nil {
 		return err
 	}
+	if err := d.buildDeltas(ctx, p); err != nil {
+		return err
+	}
 	if err := d.patchRepository(p); err != nil {
 		return err
 	}
@@ -272,6 +275,22 @@ func (d *Deployer) patchLocalisation(p *Plan) error {
 		r := locrResource(h, l)
 		r.Refs = base.Refs
 		p.put(chunk, r)
+	}
+	return nil
+}
+
+func (d *Deployer) buildDeltas(ctx context.Context, p *Plan) error {
+	if len(p.Deltas) == 0 {
+		return nil
+	}
+	idx, err := d.game.index()
+	if err != nil {
+		return err
+	}
+	for _, j := range p.Deltas {
+		if err := j.build(ctx, idx, d.cfg.abs(filepath.Join("cache", "deltas")), d.cfg.abs(filepath.Join("cache", "work"))); err != nil {
+			return fmt.Errorf("%s: %w", j.path, err)
+		}
 	}
 	return nil
 }

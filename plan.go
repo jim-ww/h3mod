@@ -29,6 +29,7 @@ type Plan struct {
 	Loc       []locEdit                 // strings to set in LOCRs
 	JSONEdits []*jsonEdit               // unlockables, contracts and JSON patches, in order
 	Blobs     []blob                    // online resources to register
+	Deltas    []*deltaJob               // built at deploy time, like textures
 	PD        []PDChange                // packagedefinition changes
 	Thumbs    []string                  // lines for thumbs.dat's [Hitman5] section
 	Notes     []string                  // option reconciliation and similar
@@ -392,6 +393,13 @@ func (p *Plan) addContentFile(m *Mod, chunk int, path string) error {
 			return err
 		}
 		p.JSONEdits = append(p.JSONEdits, e)
+	case strings.HasSuffix(lower, ".delta"):
+		j, err := newDeltaJob(path)
+		if err != nil {
+			return err
+		}
+		p.add(chunk, j.out)
+		p.Deltas = append(p.Deltas, j)
 	case strings.HasSuffix(lower, ".material.json"):
 		res, err := buildMaterial(path)
 		if err != nil {
@@ -430,7 +438,7 @@ func (p *Plan) addContentFile(m *Mod, chunk int, path string) error {
 
 // specialFiles are SMF content types h3mod doesn't convert yet.
 var specialFiles = []string{
-	"sfx.wem", "delta", "rtlv.json",
+	"sfx.wem", "rtlv.json",
 }
 
 func (p *Plan) removeEntity(temp uint64) {
