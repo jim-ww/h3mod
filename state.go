@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"slices"
@@ -52,6 +53,7 @@ func (s *State) save(path string) error {
 // data: those are identified by file, offset, length, size and mtime.
 func fingerprint(res []*Resource) (string, error) {
 	h := sha256.New()
+	io.WriteString(h, "h3mod archive v2\n") // bump when the archive format changes
 	stats := map[string]string{}
 	sorted := slices.Clone(res)
 	slices.SortFunc(sorted, func(a, b *Resource) int {

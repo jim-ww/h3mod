@@ -179,7 +179,8 @@ func encodeRefs(refs []Ref) []byte {
 	}
 	n := len(refs)
 	b := make([]byte, 4+n+n*8)
-	le.PutUint32(b, uint32(n))
+	// The game's archives always set the top two bits of the count.
+	le.PutUint32(b, uint32(n)|0xC0000000)
 	for i, r := range refs {
 		b[4+i] = r.Flag
 		le.PutUint64(b[4+n+i*8:], r.Hash)
