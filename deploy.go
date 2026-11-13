@@ -68,6 +68,11 @@ func (d *Deployer) Deploy(ctx context.Context, skipUnsupported bool, out string)
 	if err != nil {
 		return err
 	}
+	if p.Reordered {
+		if err := d.cfg.save(); err != nil {
+			return err
+		}
+	}
 	for _, n := range p.Notes {
 		d.log("note: %s", n)
 	}

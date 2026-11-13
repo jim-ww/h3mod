@@ -36,6 +36,7 @@ type Plan struct {
 	Thumbs    []string                  // lines for thumbs.dat's [Hitman5] section
 	Notes     []string                  // option reconciliation and similar
 	Skipped   map[string]map[string]int // mod -> unsupported feature -> count
+	Reordered bool                      // cfg.Enabled was sorted and needs saving
 
 	entity   map[uint64]*entityJob // by TEMP hash
 	wwev     map[uint64]*wwevJob   // by WWEV hash
@@ -108,6 +109,17 @@ func buildPlan(cfg *Config, game *gameData, strict bool) (*Plan, error) {
 	p.condVars = map[string]any{"config": map[string]any{
 		"loadOrder": loadOrder, "modOptions": modOptions, "platform": platform,
 	}}
+	if strict {
+		order, err := sortLoadOrder(cfg, mods, p.condVars)
+		if err != nil {
+			return nil, err
+		}
+		if !slices.Equal(order, cfg.Enabled) {
+			cfg.Enabled = order
+			p.Reordered = true
+			p.Notes = append(p.Notes, "load order sorted by the mods' loadBefore/loadAfter rules")
+		}
+	}
 	for _, dir := range cfg.Enabled {
 		i := slices.IndexFunc(mods, func(m *Mod) bool { return m.Dir == dir })
 		if i < 0 {

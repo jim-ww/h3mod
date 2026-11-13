@@ -78,7 +78,7 @@
           pname = "h3mod";
           version = "0.1.0";
           src = self;
-          vendorHash = "sha256-GPYWBOWaJorIX1E7X9zoWvHnfCghzqUb/UGKRD4mJzQ=";
+          vendorHash = "sha256-xdOlSdWE/U++ZDhd77WaGiWdz0Nb8KcRBChKU2kLbEA=";
           doCheck = false;
           nativeBuildInputs = [ pkgs.makeWrapper ];
           postInstall = ''

@@ -62,6 +62,8 @@ type ManifestContent struct {
 	Thumbs             []string     `json:"thumbs"`
 	Requirements       []string     `json:"requirements"` // mod IDs that must be enabled
 	SupportedPlatforms []string     `json:"supportedPlatforms"`
+	LoadBefore         []loadRule   `json:"loadBefore"` // mods this one must load before
+	LoadAfter          []loadRule   `json:"loadAfter"`
 	BlobsFolders       []string     `json:"blobsFolders"` // files served as online resources
 
 	// Localisation is {language: {string ID: text}} for the global LOCR;
