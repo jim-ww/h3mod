@@ -45,10 +45,12 @@ func (m *Mod) Version() string {
 // Manifest is the part of an SMF manifest h3mod uses. Fields that the root
 // and options share live in ManifestContent.
 type Manifest struct {
-	ID      string   `json:"id"`
-	Name    string   `json:"name"`
-	Version string   `json:"version"`
-	Options []Option `json:"options"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	// UpdateCheck is a URL serving {"version", "changelog", "url"}.
+	UpdateCheck string   `json:"updateCheck"`
+	Options     []Option `json:"options"`
 	// Incompatibilities are mod IDs that must not be enabled alongside.
 	Incompatibilities []string `json:"incompatibilities"`
 	ManifestContent

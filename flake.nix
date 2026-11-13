@@ -83,7 +83,7 @@
           nativeBuildInputs = [ pkgs.makeWrapper ];
           postInstall = ''
             wrapProgram $out/bin/h3mod \
-              --prefix PATH : ${pkgs.lib.makeBinPath [ quickentity resourcetool pkgs.xdelta ]} \
+              --prefix PATH : ${pkgs.lib.makeBinPath [ quickentity resourcetool pkgs.xdelta pkgs._7zz ]} \
               --set-default H3MOD_HASH_LIST ${hash-list} \
               --set-default H3MOD_PATH_LIST ${path-list}/hash_list.txt
           '';
@@ -91,7 +91,7 @@
       };
 
       devShells.${system}.default = pkgs.mkShell {
-        packages = [ pkgs.go quickentity resourcetool pkgs.xdelta ];
+        packages = [ pkgs.go quickentity resourcetool pkgs.xdelta pkgs._7zz ];
         H3MOD_HASH_LIST = "${hash-list}";
         H3MOD_PATH_LIST = "${path-list}/hash_list.txt";
       };

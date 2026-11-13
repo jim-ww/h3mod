@@ -26,6 +26,10 @@ mods:
   enable <mod>...              enable mods (appended to the load order)
   disable <mod>...             disable mods
   move <mod> <position>        move a mod in the load order (later wins)
+  install [-name n] [-replace] [-enable] <archive|rpkg>
+                               add mods from a zip/7z/rar or .rpkg to the mods dir
+  updates                      check mods' update URLs for new versions
+  update <mod>...              download and install new versions
 
 options:
   options [mod]                mods with options, or one mod's options
@@ -78,6 +82,12 @@ func run(ctx context.Context, args []string) error {
 		return toggle(cfg, cmd == "enable", rest)
 	case "move":
 		return move(cfg, rest)
+	case "install":
+		return installCmd(ctx, cfg, rest)
+	case "updates":
+		return updatesCmd(ctx, cfg)
+	case "update":
+		return updateCmd(ctx, cfg, rest)
 	case "options":
 		return listOptions(cfg, rest)
 	case "option":
@@ -168,6 +178,102 @@ func toggle(cfg *Config, on bool, names []string) error {
 		}
 	}
 	return cfg.save()
+}
+
+func installCmd(ctx context.Context, cfg *Config, args []string) error {
+	fl := flag.NewFlagSet("install", flag.ContinueOnError)
+	name := fl.String("name", "", "folder name for an rpkg mod (default: the file's name)")
+	replace := fl.Bool("replace", false, "replace mods that are already installed")
+	enable := fl.Bool("enable", false, "enable the installed mods")
+	if err := fl.Parse(args); err != nil {
+		return err
+	}
+	if fl.NArg() != 1 {
+		return errors.New("usage: install [-name n] [-replace] [-enable] <archive|rpkg>")
+	}
+	src := fl.Arg(0)
+	if *name == "" {
+		*name = strings.TrimSuffix(filepath.Base(src), filepath.Ext(src))
+	}
+	dirs, err := installMods(ctx, cfg, src, *name, *replace, "", "")
+	for _, d := range dirs {
+		fmt.Println("installed", d)
+		if *enable && !cfg.isEnabled(d) {
+			cfg.Enabled = append(cfg.Enabled, d)
+		}
+	}
+	if err != nil {
+		return err
+	}
+	if *enable {
+		return cfg.save()
+	}
+	fmt.Println("enable with: h3mod enable <mod>")
+	return nil
+}
+
+func updatesCmd(ctx context.Context, cfg *Config) error {
+	mods, err := discoverMods(cfg.abs(cfg.Mods))
+	if err != nil {
+		return err
+	}
+	checked := 0
+	for _, m := range mods {
+		if m.Manifest == nil || m.Manifest.UpdateCheck == "" {
+			continue
+		}
+		checked++
+		u, newer, err := checkUpdate(ctx, m)
+		switch {
+		case err != nil:
+			fmt.Printf("%s: %v\n", m.Dir, err)
+		case newer:
+			fmt.Printf("%s: %s -> %s\n", m.Dir, m.Manifest.Version, u.Version)
+			for line := range strings.SplitSeq(strings.TrimSpace(u.Changelog), "\n") {
+				fmt.Println("    " + line)
+			}
+		}
+	}
+	fmt.Printf("checked %d of %d mods (others have no update URL)\n", checked, len(mods))
+	return nil
+}
+
+func updateCmd(ctx context.Context, cfg *Config, names []string) error {
+	if len(names) == 0 {
+		return errors.New("usage: update <mod>...")
+	}
+	for _, n := range names {
+		m, err := loadMod(cfg, n)
+		if err != nil {
+			return err
+		}
+		if m.Manifest == nil || m.Manifest.UpdateCheck == "" {
+			return fmt.Errorf("%s has no update URL", m.Dir)
+		}
+		u, newer, err := checkUpdate(ctx, m)
+		if err != nil {
+			return err
+		}
+		if !newer {
+			fmt.Printf("%s: %s is the latest\n", m.Dir, m.Manifest.Version)
+			continue
+		}
+		work := cfg.abs(filepath.Join("cache", "work"))
+		if err := os.MkdirAll(work, 0o755); err != nil {
+			return err
+		}
+		file, err := download(ctx, u.URL, work)
+		if err != nil {
+			return err
+		}
+		_, err = installMods(ctx, cfg, file, "", true, m.Dir, m.ID())
+		os.Remove(file)
+		if err != nil {
+			return fmt.Errorf("%s: %w", m.Dir, err)
+		}
+		fmt.Printf("%s: updated %s -> %s\n", m.Dir, m.Manifest.Version, u.Version)
+	}
+	return nil
 }
 
 func move(cfg *Config, args []string) error {

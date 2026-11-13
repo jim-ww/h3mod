@@ -10,7 +10,7 @@ game as it was; the next deploy cleans up. `undeploy` restores vanilla.
 
 ## Running
 
-The external tools (ResourceTool, quickentity-rs, xdelta3) and the hash lists
+The external tools (ResourceTool, quickentity-rs, xdelta3, 7-Zip) and the hash lists
 come from the flake:
 
     nix run . -- status            # packaged binary
@@ -31,6 +31,9 @@ Config is `h3mod.json` in the current directory (`-config` to change):
     status                         mods in load order, options, problems
     enable <mod>... / disable <mod>...
     move <mod> <position>
+    install [-name n] [-replace] [-enable] <archive|rpkg>
+    updates                        check mods' update URLs
+    update <mod>...                download and install new versions
     options <mod>                  list options and what is selected
     option <mod> <option> [on|off] select ("Group:Name" for choices)
     reset-options <mod>
@@ -38,7 +41,15 @@ Config is `h3mod.json` in the current directory (`-config` to change):
     deploy [-skip-unsupported] [-out dir]
     undeploy
 
-`<mod>` is a folder name or a mod ID.
+`<mod>` is a folder name or a mod ID. New folders in the mods directory show
+up as disabled; a deleted folder is dropped from the load order on deploy.
+
+`install` takes what SMF's Mod Manager does: archives of framework mod
+folders, or `.rpkg` files (loose or archived) that become an rpkg mod named
+by `-name`. Archives are unpacked with 7-Zip into a hidden folder in the mods
+directory, checked (manifests, content folders, no links) and moved into
+place. `update` installs into the mod's existing folder, keeping its place
+in the load order and its options.
 
 Before each deploy the load order is sorted by the mods' `loadBefore` and
 `loadAfter` rules, keeping the current order where the rules allow, and saved.
