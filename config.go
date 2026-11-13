@@ -10,15 +10,19 @@ import (
 
 // Config is h3mod.json. Relative paths are relative to the config file.
 type Config struct {
-	Game    string              `json:"game"`
-	Mods    string              `json:"mods"`
-	Enabled []string            `json:"enabled"`           // mod folder names in load order; later ones win
-	Options map[string][]string `json:"options,omitempty"` // mod folder -> chosen option names
+	Game    string                 `json:"game"`
+	Mods    string                 `json:"mods"`
+	Enabled []string               `json:"enabled"`           // mod folder names in load order; later ones win
+	Options map[string]*ModOptions `json:"options,omitempty"` // by mod folder
 
 	path string
 }
 
 func loadConfig(path string) (*Config, error) {
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
 	c := &Config{Game: "..", Mods: "mods", path: path}
 	b, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {

@@ -19,17 +19,17 @@
     "quickentity-rs": {
       "flake": false,
       "locked": {
-        "lastModified": 1670475356,
-        "narHash": "sha256-XlIbZQdaqyYrsH4Vn9NDcLnCA4BIUzKq3VNkz8ROng8=",
+        "lastModified": 1720970503,
+        "narHash": "sha256-OHOm85oputXVxQDycDndgag0+AXIuCaTYEfeNYRKBL8=",
         "owner": "atampy25",
         "repo": "quickentity-rs",
-        "rev": "1e2f9401765ea3bd1c4b879c679b86027e9aba1e",
+        "rev": "010765c77660ca1660a044b8b236d9ff537b380f",
         "type": "github"
       },
       "original": {
         "owner": "atampy25",
-        "ref": "3.1",
         "repo": "quickentity-rs",
+        "rev": "010765c77660ca1660a044b8b236d9ff537b380f",
         "type": "github"
       }
     },

@@ -4,9 +4,10 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-    # QuickEntity 3.1, the version SMF uses for entity.patch.json (patchVersion 6)
+    # QuickEntity 3.1 CLI as SMF calls it (patch apply --permissive --format-fix):
+    # the last revision before the CLI moved to hitman-commons
     quickentity-rs = {
-      url = "github:atampy25/quickentity-rs/3.1";
+      url = "github:atampy25/quickentity-rs/010765c77660ca1660a044b8b236d9ff537b380f";
       flake = false;
     };
 
@@ -24,11 +25,17 @@
 
       quickentity = pkgs.rustPlatform.buildRustPackage {
         pname = "quickentity-rs";
-        version = "3.1";
+        version = "1.0.0-010765c";
         src = quickentity-rs;
         cargoLock.lockFile = "${quickentity-rs}/Cargo.lock";
         cargoBuildFlags = [ "--bin" "quickentity-rs" ];
         doCheck = false;
+        # Upstream builds with nightly: allow its #![feature]s on stable, and
+        # replace auto_context, which uses a since-changed nightly API.
+        RUSTC_BOOTSTRAP = 1;
+        postPatch = ''
+          cp ${./nix/auto_context.rs} auto_context/src/lib.rs
+        '';
         # the GUI binary isn't built, but its dependencies still need these
         nativeBuildInputs = [ pkgs.pkg-config ];
         buildInputs = [ pkgs.gtk3 ];

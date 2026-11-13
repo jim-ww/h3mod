@@ -6,3 +6,4 @@
 *.rpkg
 /out/
 /result*
+/cache/

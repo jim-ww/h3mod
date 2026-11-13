@@ -3,10 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
-	"sort"
 	"strconv"
 )
 
@@ -19,59 +16,6 @@ const (
 )
 
 var archiveName = regexp.MustCompile(`^chunk(\d+)(?:patch(\d+))?\.rpkg$`)
-
-// baseArchives lists vanilla archives of a chunk, newest patch first.
-func baseArchives(runtime string, chunk int) ([]string, error) {
-	ents, err := os.ReadDir(runtime)
-	if err != nil {
-		return nil, err
-	}
-	type arch struct {
-		path  string
-		patch int
-	}
-	var out []arch
-	for _, e := range ents {
-		m := archiveName.FindStringSubmatch(e.Name())
-		if m == nil {
-			continue
-		}
-		if c, _ := strconv.Atoi(m[1]); c != chunk {
-			continue
-		}
-		p, _ := strconv.Atoi(m[2])
-		if p >= managedPatchMin {
-			continue
-		}
-		out = append(out, arch{filepath.Join(runtime, e.Name()), p})
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].patch > out[j].patch })
-	paths := make([]string, len(out))
-	for i, a := range out {
-		paths[i] = a.path
-	}
-	return paths, nil
-}
-
-// baseResource finds the newest vanilla version of a resource in a chunk.
-func baseResource(runtime string, chunk int, hash uint64) (*Resource, error) {
-	paths, err := baseArchives(runtime, chunk)
-	if err != nil {
-		return nil, err
-	}
-	for _, p := range paths {
-		res, err := ReadArchive(p)
-		if err != nil {
-			return nil, err
-		}
-		for _, r := range res {
-			if r.Hash == hash {
-				return r, nil
-			}
-		}
-	}
-	return nil, fmt.Errorf("%016X not found in chunk%d", hash, chunk)
-}
 
 // patchRepository applies repository.json patches (item ID -> partial item)
 // to the base REPO, in order.

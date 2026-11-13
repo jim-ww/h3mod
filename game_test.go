@@ -17,9 +17,13 @@ func TestMergeKeepsOrder(t *testing.T) {
 }
 
 func TestPatchGameRepository(t *testing.T) {
-	base, err := baseResource("../Runtime", 0, repoHash)
+	idx, err := loadIndex("../Runtime")
 	if err != nil {
 		t.Skip("no game files: ", err)
+	}
+	base, err := idx.lookup(repoHash)
+	if err != nil {
+		t.Fatal(err)
 	}
 	orig, err := base.Data()
 	if err != nil {

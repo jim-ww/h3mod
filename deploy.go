@@ -2,14 +2,18 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -18,127 +22,115 @@ const tmpSuffix = ".h3mod-tmp"
 var (
 	patchLevel     = regexp.MustCompile(`patchlevel=[0-9]+`)
 	moddedPD       = []byte("patchlevel=310")
-	outputArchive  = regexp.MustCompile(fmt.Sprintf(`^chunk\d+patch%d\.rpkg$`, outputPatch))
 	errUnsupported = errors.New("enabled mods use unsupported features (use -skip-unsupported to deploy without them)")
 )
 
-// buildPlan collects the enabled mods in load order. Missing mods are an
-// error when strict, and skipped otherwise.
-func buildPlan(cfg *Config, strict bool) (*Plan, error) {
-	mods, err := discoverMods(cfg.abs(cfg.Mods))
-	if err != nil {
-		return nil, err
-	}
-	byDir := map[string]*Mod{}
-	for _, m := range mods {
-		byDir[m.Dir] = m
-	}
-	p := newPlan()
-	for _, dir := range cfg.Enabled {
-		m := byDir[dir]
-		if m == nil {
-			if !strict {
-				continue
-			}
-			return nil, fmt.Errorf("enabled mod %q not found in %s", dir, cfg.abs(cfg.Mods))
-		}
-		if err := p.addMod(m, cfg); err != nil {
-			return nil, err
-		}
-	}
-	return p, nil
+// Deployer writes mods into the game. Base game archives are never written:
+// output is chunkNpatch300.rpkg files plus packagedefinition.txt.
+type Deployer struct {
+	cfg   *Config
+	index func() (*Index, error)
+	log   func(format string, args ...any)
 }
 
-func printUnsupported(p *Plan) {
-	mods := make([]string, 0, len(p.Unsupported))
-	for m := range p.Unsupported {
-		mods = append(mods, m)
+func newDeployer(cfg *Config) *Deployer {
+	return &Deployer{
+		cfg:   cfg,
+		index: sync.OnceValues(func() (*Index, error) { return loadIndex(cfg.runtimeDir()) }),
+		log:   func(format string, args ...any) { fmt.Printf(format+"\n", args...) },
 	}
-	sort.Strings(mods)
-	for _, m := range mods {
+}
+
+func (d *Deployer) statePath() string { return d.cfg.abs("state.json") }
+
+func printSkipped(p *Plan) {
+	for _, m := range slices.Sorted(maps.Keys(p.Skipped)) {
 		var parts []string
-		for what, n := range p.Unsupported[m] {
-			parts = append(parts, fmt.Sprintf("%s ×%d", what, n))
+		for _, what := range slices.Sorted(maps.Keys(p.Skipped[m])) {
+			parts = append(parts, fmt.Sprintf("%s ×%d", what, p.Skipped[m][what]))
 		}
-		sort.Strings(parts)
 		fmt.Printf("  %s: %s\n", m, strings.Join(parts, ", "))
 	}
 }
 
-// deploy writes into the game, or into out instead when it is set.
-func deploy(cfg *Config, skipUnsupported bool, out string) error {
+// Deploy builds and installs the enabled mods. With out set, output goes
+// there instead of the game, which is left untouched.
+func (d *Deployer) Deploy(ctx context.Context, skipUnsupported bool, out string) error {
 	start := time.Now()
-	if len(cfg.Enabled) == 0 && out == "" {
-		return undeploy(cfg)
+	if len(d.cfg.Enabled) == 0 && out == "" {
+		return d.Undeploy()
 	}
-	p, err := buildPlan(cfg, true)
+	p, err := buildPlan(d.cfg, d.index, true)
 	if err != nil {
 		return err
 	}
-	if len(p.Unsupported) > 0 {
+	for _, n := range p.Notes {
+		d.log("note: %s", n)
+	}
+	if len(p.Skipped) > 0 {
 		fmt.Println("unsupported, not deployed:")
-		printUnsupported(p)
+		printSkipped(p)
 		if !skipUnsupported {
 			return errUnsupported
 		}
 	}
+	if err := d.buildEntities(ctx, p); err != nil {
+		return err
+	}
+	if err := d.patchRepository(p); err != nil {
+		return err
+	}
 
-	runtime := cfg.runtimeDir()
-	cleanPD, err := ensureCleanPD(cfg)
+	cleanPD, err := ensureCleanPD(d.cfg)
 	if err != nil {
 		return err
 	}
-	dst := runtime
+	dst := d.cfg.runtimeDir()
+	state := &State{}
 	if out != "" {
 		dst = out
 		if err := os.MkdirAll(dst, 0o755); err != nil {
 			return err
 		}
+	} else if state, err = loadState(d.statePath()); err != nil {
+		return err
 	}
 	if err := removeTemps(dst); err != nil {
 		return err
 	}
 
-	if len(p.Repo) > 0 {
-		base, err := baseResource(runtime, 0, repoHash)
-		if err != nil {
-			return err
-		}
-		repo, err := patchRepository(base, p.Repo)
-		if err != nil {
-			return err
-		}
-		p.add(0, repo)
-	}
-
-	// Stage every archive fully before touching any game file.
-	chunks := make([]int, 0, len(p.Chunks))
-	for c := range p.Chunks {
-		chunks = append(chunks, c)
-	}
-	sort.Ints(chunks)
-	keep := map[string]bool{}
-	for _, c := range chunks {
+	// Stage every changed archive fully before touching any game file.
+	next := map[string]Output{}
+	var staged []string
+	for _, c := range slices.Sorted(maps.Keys(p.Chunks)) {
 		name := fmt.Sprintf("chunk%dpatch%d.rpkg", c, outputPatch)
-		res := make([]*Resource, 0, len(p.Chunks[c]))
-		for _, r := range p.Chunks[c] {
-			res = append(res, r)
+		res := slices.Collect(maps.Values(p.Chunks[c]))
+		fp, err := fingerprint(res)
+		if err != nil {
+			return err
 		}
-		if err := WritePatchArchive(filepath.Join(dst, name+tmpSuffix), res); err != nil {
-			return fmt.Errorf("write %s: %w", name, err)
+		if old, ok := state.Archives[name]; ok && old.Inputs == fp && fileSize(filepath.Join(dst, name)) == old.Size {
+			next[name] = old
+			d.log("%s: %d files, unchanged", name, len(res))
+			continue
 		}
-		keep[name] = true
-		fmt.Printf("%s: %d files\n", name, len(res))
+		tmp := filepath.Join(dst, name+tmpSuffix)
+		if err := WritePatchArchive(tmp, res); err != nil {
+			return fmt.Errorf("writing %s: %w", name, err)
+		}
+		next[name] = Output{Inputs: fp, Size: fileSize(tmp)}
+		staged = append(staged, name)
+		d.log("%s: %d files", name, len(res))
 	}
 
 	// Each rename is atomic; packagedefinition goes last so the game only
-	// starts loading patch archives once all of them are in place.
-	for name := range keep {
+	// loads patch archives once all of them are in place.
+	for _, name := range staged {
 		if err := os.Rename(filepath.Join(dst, name+tmpSuffix), filepath.Join(dst, name)); err != nil {
 			return err
 		}
 	}
-	if err := removeOutputs(dst, keep); err != nil {
+	if err := removeOutputs(dst, next); err != nil {
 		return err
 	}
 	plain, err := decryptPD(cleanPD)
@@ -149,28 +141,99 @@ func deploy(cfg *Config, skipUnsupported bool, out string) error {
 	if err := writeFileAtomic(filepath.Join(dst, "packagedefinition.txt"), encryptPD(plain)); err != nil {
 		return err
 	}
-	fmt.Printf("deployed %d mods to %s in %s\n", len(cfg.Enabled), dst, time.Since(start).Round(time.Millisecond))
+	if out == "" {
+		state.Deployed, state.Mods, state.Archives = time.Now(), slices.Clone(d.cfg.Enabled), next
+		if err := state.save(d.statePath()); err != nil {
+			return err
+		}
+	}
+	d.log("deployed %d mods to %s in %s", len(d.cfg.Enabled), dst, time.Since(start).Round(time.Millisecond))
 	return nil
 }
 
-func undeploy(cfg *Config) error {
-	runtime := cfg.runtimeDir()
-	cleanPD, err := ensureCleanPD(cfg)
+func (d *Deployer) buildEntities(ctx context.Context, p *Plan) error {
+	if len(p.Entities) == 0 {
+		return nil
+	}
+	tools, err := findTools()
+	if err != nil {
+		return err
+	}
+	idx, err := d.index()
+	if err != nil {
+		return err
+	}
+	er := &entityRunner{
+		tools:    tools,
+		idx:      idx,
+		cacheDir: d.cfg.abs(filepath.Join("cache", "entities")),
+		workDir:  d.cfg.abs(filepath.Join("cache", "work")),
+	}
+	start := time.Now()
+	results, err := er.runAll(ctx, p.Entities)
+	if err != nil {
+		return err
+	}
+	for i, j := range p.Entities {
+		p.put(j.chunk, results[i][0])
+		p.put(j.chunk, results[i][1])
+	}
+	d.log("entities: %d in %s", len(p.Entities), time.Since(start).Round(time.Millisecond))
+	return nil
+}
+
+func (d *Deployer) patchRepository(p *Plan) error {
+	if len(p.Repo) == 0 {
+		return nil
+	}
+	base := p.Chunks[0][repoHash] // a mod may ship a whole repository
+	if base == nil {
+		idx, err := d.index()
+		if err != nil {
+			return err
+		}
+		if base, err = idx.lookup(repoHash); err != nil {
+			return err
+		}
+	}
+	repo, err := patchRepository(base, p.Repo)
+	if err != nil {
+		return err
+	}
+	p.put(0, repo)
+	return nil
+}
+
+// Undeploy restores vanilla game files.
+func (d *Deployer) Undeploy() error {
+	runtime := d.cfg.runtimeDir()
+	cleanPD, err := ensureCleanPD(d.cfg)
 	if err != nil {
 		return err
 	}
 	if err := removeTemps(runtime); err != nil {
 		return err
 	}
-	// Restore packagedefinition first: without it the game ignores patch300.
+	// packagedefinition first: without it the game ignores mod archives.
 	if err := writeFileAtomic(filepath.Join(runtime, "packagedefinition.txt"), cleanPD); err != nil {
 		return err
 	}
 	if err := removeOutputs(runtime, nil); err != nil {
 		return err
 	}
-	fmt.Println("game files restored to vanilla")
+	if err := (&State{}).save(d.statePath()); err != nil {
+		return err
+	}
+	d.log("game files restored to vanilla")
 	return nil
+}
+
+func fileSize(path string) int64 {
+	st, err := os.Stat(path)
+	if err != nil {
+		return -1
+	}
+	return st.Size()
 }
 
 // ensureCleanPD returns the vanilla packagedefinition, keeping a copy in
@@ -214,32 +277,40 @@ func ensureCleanPD(cfg *Config) ([]byte, error) {
 	return b, writeFileAtomic(cleanPath, b)
 }
 
-// removeOutputs deletes patch300 archives except those in keep (ours from a
-// previous deploy, or SMF's).
-func removeOutputs(runtime string, keep map[string]bool) error {
-	ents, err := os.ReadDir(runtime)
+// removeOutputs deletes mod archives (patch numbers 200 to 300, which SMF
+// manages too and the game never ships) except those in keep.
+func removeOutputs(dir string, keep map[string]Output) error {
+	ents, err := os.ReadDir(dir)
 	if err != nil {
 		return err
 	}
 	for _, e := range ents {
-		if outputArchive.MatchString(e.Name()) && !keep[e.Name()] {
-			if err := os.Remove(filepath.Join(runtime, e.Name())); err != nil && !errors.Is(err, fs.ErrNotExist) {
-				return err
-			}
+		m := archiveName.FindStringSubmatch(e.Name())
+		if m == nil || m[2] == "" {
+			continue
+		}
+		if n, _ := strconv.Atoi(m[2]); n < managedPatchMin || n > outputPatch {
+			continue
+		}
+		if _, ok := keep[e.Name()]; ok {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, e.Name())); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
 		}
 	}
 	return nil
 }
 
 // removeTemps cleans up after an interrupted deploy.
-func removeTemps(runtime string) error {
-	ents, err := os.ReadDir(runtime)
+func removeTemps(dir string) error {
+	ents, err := os.ReadDir(dir)
 	if err != nil {
 		return err
 	}
 	for _, e := range ents {
 		if strings.HasSuffix(e.Name(), tmpSuffix) {
-			if err := os.Remove(filepath.Join(runtime, e.Name())); err != nil {
+			if err := os.Remove(filepath.Join(dir, e.Name())); err != nil {
 				return err
 			}
 		}
