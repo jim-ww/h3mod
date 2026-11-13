@@ -16,9 +16,15 @@
       url = "https://github.com/OrfeasZ/ZHMTools/releases/download/v4.3.0/ResourceTool-linux-x64.zip";
       flake = false;
     };
+
+    # sound tag and switch names for dlge.json, as TonyTools ships them
+    hash-list = {
+      url = "https://github.com/glacier-modding/Hitman-l10n-Hashes/releases/download/v102/hash_list.hmla";
+      flake = false;
+    };
   };
 
-  outputs = { self, nixpkgs, quickentity-rs, resourcetool-bin }:
+  outputs = { self, nixpkgs, quickentity-rs, resourcetool-bin, hash-list }:
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
@@ -63,17 +69,20 @@
           pname = "h3mod";
           version = "0.1.0";
           src = self;
-          vendorHash = null;
+          vendorHash = "sha256-GPYWBOWaJorIX1E7X9zoWvHnfCghzqUb/UGKRD4mJzQ=";
           doCheck = false;
           nativeBuildInputs = [ pkgs.makeWrapper ];
           postInstall = ''
-            wrapProgram $out/bin/h3mod --prefix PATH : ${pkgs.lib.makeBinPath [ quickentity resourcetool ]}
+            wrapProgram $out/bin/h3mod \
+              --prefix PATH : ${pkgs.lib.makeBinPath [ quickentity resourcetool ]} \
+              --set-default H3MOD_HASH_LIST ${hash-list}
           '';
         };
       };
 
       devShells.${system}.default = pkgs.mkShell {
         packages = [ pkgs.go quickentity resourcetool ];
+        H3MOD_HASH_LIST = "${hash-list}";
       };
     };
 }

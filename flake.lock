@@ -1,5 +1,17 @@
 {
   "nodes": {
+    "hash-list": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-ei/2CQKqsQuL/FeuNClZJOMSHGqZcrEJ5wJ+0HNGnmg=",
+        "type": "file",
+        "url": "https://github.com/glacier-modding/Hitman-l10n-Hashes/releases/download/v102/hash_list.hmla"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://github.com/glacier-modding/Hitman-l10n-Hashes/releases/download/v102/hash_list.hmla"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1794386569,
@@ -48,6 +60,7 @@
     },
     "root": {
       "inputs": {
+        "hash-list": "hash-list",
         "nixpkgs": "nixpkgs",
         "quickentity-rs": "quickentity-rs",
         "resourcetool-bin": "resourcetool-bin"

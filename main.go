@@ -130,7 +130,7 @@ func status(cfg *Config) error {
 			fmt.Printf("      %s (%s)\n", m.Title(), m.Dir)
 		}
 	}
-	p, err := buildPlan(cfg, newDeployer(cfg).index, false)
+	p, err := buildPlan(cfg, newGameData(cfg), false)
 	if err != nil {
 		return err
 	}

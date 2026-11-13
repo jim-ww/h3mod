@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 var (
@@ -29,7 +30,7 @@ type Plan struct {
 
 	entity   map[uint64]*entityJob // by TEMP hash
 	fallback []placed              // added only where nothing else is
-	index    func() (*Index, error)
+	game     *gameData
 }
 
 type placed struct {
@@ -37,23 +38,44 @@ type placed struct {
 	res   *Resource
 }
 
-func newPlan(index func() (*Index, error)) *Plan {
+func newPlan(game *gameData) *Plan {
 	return &Plan{
 		Chunks:  map[int]map[uint64]*Resource{},
 		Skipped: map[string]map[string]int{},
 		entity:  map[uint64]*entityJob{},
-		index:   index,
+		game:    game,
+	}
+}
+
+// gameData loads game-wide lookups on first use.
+type gameData struct {
+	index    func() (*Index, error)
+	hashList func() (*HashList, error)
+}
+
+func newGameData(cfg *Config) *gameData {
+	return &gameData{
+		index: sync.OnceValues(func() (*Index, error) { return loadIndex(cfg.runtimeDir()) }),
+		hashList: sync.OnceValues(func() (*HashList, error) {
+			// The nix package points H3MOD_HASH_LIST at a pinned hash list;
+			// SMF ships the same file.
+			path := os.Getenv("H3MOD_HASH_LIST")
+			if path == "" {
+				path = filepath.Join(cfg.abs(cfg.Game), "SMF", "Third-Party", "hash_list.hmla")
+			}
+			return loadHashList(path)
+		}),
 	}
 }
 
 // buildPlan collects the enabled mods in load order. Missing mods are an
 // error when strict, and skipped otherwise.
-func buildPlan(cfg *Config, index func() (*Index, error), strict bool) (*Plan, error) {
+func buildPlan(cfg *Config, game *gameData, strict bool) (*Plan, error) {
 	mods, err := discoverMods(cfg.abs(cfg.Mods))
 	if err != nil {
 		return nil, err
 	}
-	p := newPlan(index)
+	p := newPlan(game)
 	for _, dir := range cfg.Enabled {
 		i := slices.IndexFunc(mods, func(m *Mod) bool { return m.Dir == dir })
 		if i < 0 {
@@ -253,6 +275,16 @@ func (p *Plan) addContentFile(m *Mod, chunk int, path string) error {
 		p.removeEntity(temp)
 		p.entity[temp] = j
 		p.Entities = append(p.Entities, j)
+	case strings.HasSuffix(lower, ".dlge.json"):
+		hl, err := p.game.hashList()
+		if err != nil {
+			return err
+		}
+		r, err := buildDLGE(path, hl)
+		if err != nil {
+			return err
+		}
+		p.add(chunk, r)
 	case rawFileName.MatchString(name):
 		r, err := readRawFile(path)
 		if errors.Is(err, fs.ErrNotExist) {
@@ -275,7 +307,7 @@ func (p *Plan) addContentFile(m *Mod, chunk int, path string) error {
 // specialFiles are SMF content types h3mod doesn't convert yet.
 var specialFiles = []string{
 	"unlockables.json", "contract.json", "json.patch.json", "material.json",
-	"texture.tga", "sfx.wem", "delta", "clng.json", "ditl.json", "dlge.json",
+	"texture.tga", "sfx.wem", "delta", "clng.json", "ditl.json",
 	"locr.json", "rtlv.json",
 }
 
@@ -380,7 +412,7 @@ func readFileFold(path string) ([]byte, error) {
 // extract_non_boot_hash_depends_from (only chunk0, for portFromChunk1).
 // Files already staged win, as in SMF.
 func (p *Plan) addDependency(d Dependency) error {
-	idx, err := p.index()
+	idx, err := p.game.index()
 	if err != nil {
 		return err
 	}

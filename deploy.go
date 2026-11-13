@@ -13,7 +13,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -28,16 +27,16 @@ var (
 // Deployer writes mods into the game. Base game archives are never written:
 // output is chunkNpatch300.rpkg files plus packagedefinition.txt.
 type Deployer struct {
-	cfg   *Config
-	index func() (*Index, error)
-	log   func(format string, args ...any)
+	cfg  *Config
+	game *gameData
+	log  func(format string, args ...any)
 }
 
 func newDeployer(cfg *Config) *Deployer {
 	return &Deployer{
-		cfg:   cfg,
-		index: sync.OnceValues(func() (*Index, error) { return loadIndex(cfg.runtimeDir()) }),
-		log:   func(format string, args ...any) { fmt.Printf(format+"\n", args...) },
+		cfg:  cfg,
+		game: newGameData(cfg),
+		log:  func(format string, args ...any) { fmt.Printf(format+"\n", args...) },
 	}
 }
 
@@ -60,7 +59,7 @@ func (d *Deployer) Deploy(ctx context.Context, skipUnsupported bool, out string)
 	if len(d.cfg.Enabled) == 0 && out == "" {
 		return d.Undeploy()
 	}
-	p, err := buildPlan(d.cfg, d.index, true)
+	p, err := buildPlan(d.cfg, d.game, true)
 	if err != nil {
 		return err
 	}
@@ -159,7 +158,7 @@ func (d *Deployer) buildEntities(ctx context.Context, p *Plan) error {
 	if err != nil {
 		return err
 	}
-	idx, err := d.index()
+	idx, err := d.game.index()
 	if err != nil {
 		return err
 	}
@@ -188,7 +187,7 @@ func (d *Deployer) patchRepository(p *Plan) error {
 	}
 	base := p.Chunks[0][repoHash] // a mod may ship a whole repository
 	if base == nil {
-		idx, err := d.index()
+		idx, err := d.game.index()
 		if err != nil {
 			return err
 		}
