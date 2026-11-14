@@ -177,6 +177,56 @@ func toggle(cfg *Config, on bool, names []string) error {
 	return cfg.save()
 }
 
+// removeCmd deletes mods' folders, asking first unless yes is set.
+func removeCmd(cfg *Config, names []string, yes bool) error {
+	mods, err := discoverMods(cfg.abs(cfg.Mods))
+	if err != nil {
+		return err
+	}
+	var picked []*Mod
+	for _, n := range names { // resolve all first, so numbers refer to the listing
+		m, err := resolveMod(cfg, mods, n)
+		if err != nil {
+			return err
+		}
+		if !slices.Contains(picked, m) {
+			picked = append(picked, m)
+		}
+	}
+	if !yes {
+		var titles []string
+		for _, m := range picked {
+			titles = append(titles, m.Title())
+		}
+		if !confirm(fmt.Sprintf("Delete %s from %s?", strings.Join(titles, ", "), cfg.abs(cfg.Mods))) {
+			return errors.New("nothing deleted (--yes deletes without asking)")
+		}
+	}
+	for _, m := range picked {
+		if err := os.RemoveAll(m.Path); err != nil {
+			return err
+		}
+		fmt.Println("deleted", m.Dir)
+		logLine("deleted %s", m.Path)
+	}
+	if err := syncMods(cfg); err != nil {
+		return err
+	}
+	fmt.Println("deploy to take them out of the game")
+	return nil
+}
+
+// confirm asks a yes/no question on the terminal; without one it says no.
+func confirm(question string) bool {
+	if st, err := os.Stdin.Stat(); err != nil || st.Mode()&os.ModeCharDevice == 0 {
+		return false
+	}
+	fmt.Printf("%s [y/N] ", question)
+	answer, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	answer = strings.ToLower(strings.TrimSpace(answer))
+	return answer == "y" || answer == "yes"
+}
+
 func installCmd(ctx context.Context, cfg *Config, src, rpkgName string, replace bool) error {
 	if rpkgName == "" {
 		rpkgName = strings.TrimSuffix(filepath.Base(src), filepath.Ext(src))

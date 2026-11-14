@@ -74,6 +74,11 @@ func deployStatus(cfg *Config, s *State, mods []*Mod) (line string, pending bool
 			counts["changed"]++
 		}
 	}
+	for _, dir := range s.Mods { // deployed mods whose folders are gone
+		if findMod(mods, dir) == nil || findMod(mods, dir).Dir != dir {
+			counts["to remove"]++
+		}
+	}
 	var changes []string
 	for _, k := range []string{"to add", "to remove", "changed"} {
 		if counts[k] > 0 {

@@ -163,6 +163,17 @@ ones drop out of the load order.`,
 	install.Flags().StringVarP(&rpkgName, "name", "n", "", "folder name for an rpkg mod (default: the file's name)")
 	install.Flags().BoolVar(&replace, "replace", false, "replace mods that are already installed")
 	add("mods", install)
+	var yes bool
+	remove := &cobra.Command{
+		Use:               "remove <mod>...",
+		Aliases:           []string{"uninstall", "rm"},
+		Short:             "Delete mods from the mods folder (deploy afterwards to take them out of the game)",
+		Args:              cobra.MinimumNArgs(1),
+		ValidArgsFunction: c.completeMods(func(*Config, *Mod) bool { return true }),
+		RunE:              func(_ *cobra.Command, args []string) error { return removeCmd(c.cfg, args, yes) },
+	}
+	remove.Flags().BoolVarP(&yes, "yes", "y", false, "don't ask")
+	add("mods", remove)
 	add("mods", &cobra.Command{
 		Use:   "updates",
 		Short: "Check mods' update URLs for new versions, with release notes",

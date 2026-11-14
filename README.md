@@ -107,6 +107,7 @@ to `h3mod.log` next to the config.
     enable <mod>... | all / disable <mod>... | all
     move <mod> <position>
     install [--name n] [--replace] <archive|rpkg>
+    remove <mod>... [--yes]        delete mods from the mods folder (GUI: Delete mod…)
     updates                        check mods' update URLs, with release notes
     update <mod>...                download and install new versions
     options <mod>                  list options and what is selected

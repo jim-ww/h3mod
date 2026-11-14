@@ -50,4 +50,9 @@ func TestDeployStatus(t *testing.T) {
 	if !pending || !strings.HasSuffix(line, "not deployed yet: 1 to add, 1 to remove, 1 changed, load order, skip intro") {
 		t.Errorf("after changes: %q", line)
 	}
+
+	// a deployed mod whose folder was deleted still has to come out
+	if line, _ := deployStatus(cfg, s, []*Mod{a, c, d}); !strings.Contains(line, "1 to remove") {
+		t.Errorf("after deleting B: %q", line)
+	}
 }
