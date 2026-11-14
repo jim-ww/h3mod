@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"image/color"
 	"math"
 	"os"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
@@ -72,7 +74,7 @@ func main() {
 	}
 
 	a := app.NewWithID("io.github.jim-ww.h3mod")
-	g := &gui{app: a, win: a.NewWindow("h3mod " + version), ctx: context.Background(), state: &State{}}
+	g := &gui{app: a, win: a.NewWindow("h3mod " + version), ctx: context.Background(), state: &State{}, dragFrom: -1, dragTo: -1}
 	g.win.Resize(fyne.NewSize(1000, 680))
 	cfg, err := loadConfig(*cfgPath)
 	if err != nil {
@@ -127,6 +129,8 @@ type gui struct {
 	mods  []*Mod // in status order: enabled in load order, then disabled
 	sel   *Mod
 	state *State // the last deploy: what's in the game
+
+	dragFrom, dragTo int // list rows of a drag in progress, -1 otherwise
 
 	list      *widget.List
 	details   *fyne.Container
@@ -216,18 +220,21 @@ type modRow struct {
 	name   *widget.Label
 	state  *widget.Label // deployed, not deployed yet, …
 	gear   *widget.Icon  // the mod has options
+	bg     *canvas.Rectangle
 	dragDY float32
 }
 
 func newModRow(g *gui) *modRow {
-	r := &modRow{g: g, check: widget.NewCheck("", nil), name: widget.NewLabel(""), state: widget.NewLabel(""), gear: widget.NewIcon(theme.SettingsIcon())}
+	r := &modRow{g: g, check: widget.NewCheck("", nil), name: widget.NewLabel(""), state: widget.NewLabel(""),
+		gear: widget.NewIcon(theme.SettingsIcon()), bg: canvas.NewRectangle(color.Transparent)}
+	r.bg.CornerRadius = theme.InputRadiusSize()
 	r.name.Truncation = fyne.TextTruncateEllipsis
 	r.ExtendBaseWidget(r)
 	return r
 }
 
 func (r *modRow) CreateRenderer() fyne.WidgetRenderer {
-	return widget.NewSimpleRenderer(container.NewBorder(nil, nil, r.check, container.NewHBox(r.gear, r.state), r.name))
+	return widget.NewSimpleRenderer(container.NewStack(r.bg, container.NewBorder(nil, nil, r.check, container.NewHBox(r.gear, r.state), r.name)))
 }
 
 func (r *modRow) set(id int) {
@@ -255,12 +262,28 @@ func (r *modRow) set(id int) {
 	r.check.OnChanged = nil
 	r.check.SetChecked(r.g.cfg.isEnabled(m.Dir))
 	r.check.OnChanged = func(on bool) { r.g.setEnabled(m, on) }
+
+	// while dragging: the target row lights up, the dragged one fades
+	switch {
+	case r.g.dragFrom >= 0 && id == r.g.dragTo:
+		cr, cg, cb, _ := theme.Color(theme.ColorNamePrimary).RGBA()
+		r.bg.FillColor = color.NRGBA{R: uint8(cr >> 8), G: uint8(cg >> 8), B: uint8(cb >> 8), A: 0x66}
+	case r.g.dragFrom >= 0 && id == r.g.dragFrom:
+		r.bg.FillColor = theme.Color(theme.ColorNameDisabledButton)
+	default:
+		r.bg.FillColor = color.Transparent
+	}
+	r.bg.Refresh()
 }
 
 func (r *modRow) Dragged(e *fyne.DragEvent) {
 	r.dragDY += e.Dragged.DY
 	if to, ok := r.g.dropTarget(r.id, r.dragDY, r.Size().Height); ok {
 		r.g.status.SetText(fmt.Sprintf("Move %s to load order %d", r.g.mods[r.id].Title(), to+1))
+		if r.g.dragFrom != r.id || r.g.dragTo != to {
+			r.g.dragFrom, r.g.dragTo = r.id, to
+			r.g.list.Refresh()
+		}
 	}
 }
 
@@ -268,8 +291,11 @@ func (r *modRow) DragEnd() {
 	dy := r.dragDY
 	r.dragDY = 0
 	r.g.status.SetText("")
-	if to, ok := r.g.dropTarget(r.id, dy, r.Size().Height); ok {
+	r.g.dragFrom, r.g.dragTo = -1, -1
+	if to, ok := r.g.dropTarget(r.id, dy, r.Size().Height); ok && to != r.id {
 		r.g.moveTo(r.g.mods[r.id], to)
+	} else {
+		r.g.list.Refresh()
 	}
 }
 

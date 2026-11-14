@@ -2,6 +2,5 @@
 - bug: doesnt find h3mod.json in running dir AND on linux, if h3mod.json not found in current dir, should look at .config/h3mod/config.json location. (on windows should still create config in same dir)
 - instead of shipping tools together with binary, embed in binary itself? and separate gui , cli releases
 - remove 7z dependency? e.g. use go stdlib
-- make dragging mods in UI more visible
 - add way to import options AND deploy state (once again) from SMF. store/ability to specify path to SMF dir somewhere?
 - make checking updates for modes (automatically) only if enabled (disabled by default), if there are mods to be updated, mark them with icon in list and on check (manual/automatic) ask user, if they want to update or not
