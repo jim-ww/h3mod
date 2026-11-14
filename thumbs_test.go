@@ -95,3 +95,16 @@ func TestSkipIntroDefault(t *testing.T) {
 		}
 	}
 }
+
+func TestPlatform(t *testing.T) {
+	game := t.TempDir()
+	os.Mkdir(filepath.Join(game, "Retail"), 0o755)
+	cfg := &Config{Game: game, path: filepath.Join(t.TempDir(), "h3mod.json")}
+	if p := cfg.platform(); p != "steam" {
+		t.Errorf("default %s", p)
+	}
+	os.WriteFile(filepath.Join(game, "Retail", "EOSSDK-Win64-Shipping.dll"), nil, 0o644)
+	if p := cfg.platform(); p != "epic" {
+		t.Errorf("with EOS SDK %s", p)
+	}
+}

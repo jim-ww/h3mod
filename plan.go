@@ -45,6 +45,7 @@ type Plan struct {
 	fallback []placed              // added only where nothing else is
 	game     *gameData
 	condVars map[string]any // what conditional options are evaluated against
+	platform string
 }
 
 type placed struct {
@@ -103,8 +104,9 @@ func buildPlan(cfg *Config, game *gameData, deploying bool) (*Plan, error) {
 			modOptions[m.ID()] = sel
 		}
 	}
+	p.platform = cfg.platform()
 	p.condVars = map[string]any{"config": map[string]any{
-		"loadOrder": loadOrder, "modOptions": modOptions, "platform": platform,
+		"loadOrder": loadOrder, "modOptions": modOptions, "platform": p.platform,
 	}}
 	if deploying {
 		order, err := sortLoadOrder(cfg, mods, p.condVars)
@@ -141,7 +143,7 @@ func buildPlan(cfg *Config, game *gameData, deploying bool) (*Plan, error) {
 }
 
 // checkRelations notes required mods that aren't enabled, incompatible ones
-// that are, and mods made for another platform.
+// that are, and mods made for another platform (steam or epic).
 func (p *Plan) checkRelations(m *Mod, selected []string, enabled map[string]bool) {
 	if m.Manifest == nil {
 		return
@@ -158,7 +160,7 @@ func (p *Plan) checkRelations(m *Mod, selected []string, enabled map[string]bool
 		}
 		platforms = append(platforms, c.SupportedPlatforms...)
 	}
-	if len(platforms) > 0 && !slices.Contains(platforms, platform) {
+	if len(platforms) > 0 && !slices.Contains(platforms, p.platform) {
 		p.Notes = append(p.Notes, fmt.Sprintf("%s: only supports %s", m.Dir, strings.Join(platforms, ", ")))
 	}
 	for _, r := range m.Manifest.Incompatibilities {

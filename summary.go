@@ -125,7 +125,7 @@ func writeDeploySummary(cfg *Config, p *Plan, path string) error {
 		SkipIntro:            cfg.skipIntro(),
 		LoadOrder:            []string{},
 		ModOptions:           map[string][]string{},
-		Platform:             platform,
+		Platform:             cfg.platform(),
 		LastServerSideStates: &p.Server,
 	}
 	for _, dir := range cfg.Enabled {

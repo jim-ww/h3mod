@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 )
@@ -13,8 +15,6 @@ const (
 	// never base game data.
 	managedPatchMin = 200
 	outputPatch     = 300
-	// platform is what SMF's config.platform would be for this install.
-	platform = "steam"
 )
 
 var archiveName = regexp.MustCompile(`^chunk(\d+)(?:patch(\d+))?\.rpkg$`)
@@ -78,4 +78,14 @@ func patchRepository(base *Resource, patches []*node) (*Resource, error) {
 		VidMem:   base.VidMem,
 		data:     buf.Bytes(),
 	}, nil
+}
+
+// platform is what SMF's config.platform would be: "epic" when the game
+// ships the Epic Online Services SDK, "steam" otherwise. Microsoft Store
+// installs aren't supported.
+func (cfg *Config) platform() string {
+	if _, err := os.Stat(filepath.Join(cfg.abs(cfg.Game), "Retail", "EOSSDK-Win64-Shipping.dll")); err == nil {
+		return "epic"
+	}
+	return "steam"
 }
