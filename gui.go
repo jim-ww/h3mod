@@ -101,7 +101,14 @@ func main() {
 	openRunLog(cfg, "h3mod-gui "+version)
 	g.build()
 	g.win.Show()
-	g.ensureGame(func() { g.firstRun(g.reload) })
+	g.ensureGame(func() {
+		g.firstRun(func() {
+			g.reload()
+			if g.cfg.CheckUpdates {
+				g.checkUpdates(false)
+			}
+		})
+	})
 	a.Run()
 }
 
@@ -130,7 +137,8 @@ type gui struct {
 	sel   *Mod
 	state *State // the last deploy: what's in the game
 
-	dragFrom, dragTo int // list rows of a drag in progress, -1 otherwise
+	dragFrom, dragTo int                    // list rows of a drag in progress, -1 otherwise
+	updates          map[string]foundUpdate // newer versions found, by mod folder
 
 	list      *widget.List
 	details   *fyne.Container
@@ -165,7 +173,13 @@ func (g *gui) build() {
 	g.details = container.NewVBox(widget.NewLabel("Select a mod to see its options."))
 
 	install := widget.NewButtonWithIcon("Install mod…", theme.ContentAddIcon(), g.pickInstall)
-	updates := widget.NewButtonWithIcon("Check for updates", theme.DownloadIcon(), g.checkUpdates)
+	updates := widget.NewButtonWithIcon("Check for updates", theme.DownloadIcon(), func() { g.checkUpdates(true) })
+	autoUpdates := widget.NewCheck("Check on start", nil)
+	autoUpdates.Checked = g.cfg.CheckUpdates
+	autoUpdates.OnChanged = func(on bool) {
+		g.cfg.CheckUpdates = on
+		g.saveConfig()
+	}
 	deploy := widget.NewButtonWithIcon("Deploy", theme.ConfirmIcon(), func() { g.deploy(false) })
 	deploy.Importance = widget.HighImportance
 	undeploy := widget.NewButtonWithIcon("Restore vanilla", theme.HistoryIcon(), g.undeploy)
@@ -182,7 +196,7 @@ func (g *gui) build() {
 		widget.NewLabel("Game:"), container.NewBorder(nil, nil, nil, widget.NewButton("Change…", g.pickGame), g.gameLabel),
 		widget.NewLabel("Mods:"), container.NewBorder(nil, nil, nil, widget.NewButton("Change…", g.pickMods), g.modsLabel),
 	)
-	top := container.NewVBox(folders, container.NewHBox(install, updates, layout.NewSpacer(), skipIntro))
+	top := container.NewVBox(folders, container.NewHBox(install, updates, autoUpdates, layout.NewSpacer(), skipIntro))
 
 	g.logText = widget.NewLabel("Drop mod archives on this window to install them. Drag mods to change the load order.")
 	g.logText.Wrapping = fyne.TextWrapWord
@@ -220,13 +234,14 @@ type modRow struct {
 	name   *widget.Label
 	state  *widget.Label // deployed, not deployed yet, …
 	gear   *widget.Icon  // the mod has options
+	update *widget.Icon  // a newer version is available
 	bg     *canvas.Rectangle
 	dragDY float32
 }
 
 func newModRow(g *gui) *modRow {
 	r := &modRow{g: g, check: widget.NewCheck("", nil), name: widget.NewLabel(""), state: widget.NewLabel(""),
-		gear: widget.NewIcon(theme.SettingsIcon()), bg: canvas.NewRectangle(color.Transparent)}
+		gear: widget.NewIcon(theme.SettingsIcon()), update: widget.NewIcon(theme.DownloadIcon()), bg: canvas.NewRectangle(color.Transparent)}
 	r.bg.CornerRadius = theme.InputRadiusSize()
 	r.name.Truncation = fyne.TextTruncateEllipsis
 	r.ExtendBaseWidget(r)
@@ -234,7 +249,7 @@ func newModRow(g *gui) *modRow {
 }
 
 func (r *modRow) CreateRenderer() fyne.WidgetRenderer {
-	return widget.NewSimpleRenderer(container.NewStack(r.bg, container.NewBorder(nil, nil, r.check, container.NewHBox(r.gear, r.state), r.name)))
+	return widget.NewSimpleRenderer(container.NewStack(r.bg, container.NewBorder(nil, nil, r.check, container.NewHBox(r.update, r.gear, r.state), r.name)))
 }
 
 func (r *modRow) set(id int) {
@@ -245,6 +260,11 @@ func (r *modRow) set(id int) {
 		r.gear.Show()
 	} else {
 		r.gear.Hide()
+	}
+	if _, ok := r.g.updates[m.Dir]; ok {
+		r.update.Show()
+	} else {
+		r.update.Hide()
 	}
 	st := modDeployStatus(r.g.cfg, r.g.state, m)
 	r.state.SetText(strings.TrimSuffix(st, ", not deployed yet"))
@@ -577,7 +597,13 @@ func (g *gui) showDetails() {
 	}
 	remove := widget.NewButtonWithIcon("Delete mod…", theme.DeleteIcon(), func() { g.remove(m) })
 	remove.Importance = widget.DangerImportance
-	g.details.Add(container.NewHBox(remove))
+	buttons := container.NewHBox(remove)
+	if f, ok := g.updates[m.Dir]; ok {
+		update := widget.NewButtonWithIcon("Update to "+f.u.Version+"…", theme.DownloadIcon(), func() { g.offerUpdates([]foundUpdate{f}) })
+		update.Importance = widget.HighImportance
+		buttons.Add(update)
+	}
+	g.details.Add(buttons)
 
 	if m.Manifest == nil || len(m.Manifest.Options) == 0 {
 		return
@@ -715,61 +741,73 @@ func (g *gui) install(path string) {
 	})
 }
 
-func (g *gui) checkUpdates() {
-	type found struct {
-		m     *Mod
-		u     modUpdate
-		notes string
-	}
-	var updates []found
-	g.logf("checking for updates")
-	g.busy(false, func() error {
-		for _, m := range g.mods {
-			if m.Manifest == nil || m.Manifest.UpdateCheck == "" {
-				continue
-			}
-			u, newer, err := checkUpdate(g.ctx, m)
-			switch {
-			case err != nil:
-				g.logf("%s: %v", m.Dir, err)
-			case newer:
-				updates = append(updates, found{m, u, changelog(g.ctx, m, u)})
-			}
-		}
+// checkUpdates looks for newer versions of the mods, marks them in the
+// list and offers to install them. A check at start stays quiet when
+// everything is up to date.
+func (g *gui) checkUpdates(manual bool) {
+	var found []foundUpdate
+	work := func() error {
+		found = findUpdates(g.ctx, g.mods, g.logf)
 		return nil
-	}, func(error) {
-		if len(updates) == 0 {
-			g.logf("all mods with an update URL are up to date")
+	}
+	done := func(error) {
+		g.updates = map[string]foundUpdate{}
+		for _, f := range found {
+			g.updates[f.m.Dir] = f
+		}
+		g.list.Refresh()
+		if len(found) == 0 {
+			if manual {
+				g.logf("all mods with an update URL are up to date")
+			}
 			return
 		}
-		var b strings.Builder
-		for _, f := range updates {
-			fmt.Fprintf(&b, "%s: %s → %s\n%s\n\n", f.m.Title(), f.m.Manifest.Version, f.u.Version, f.notes)
+		g.offerUpdates(found)
+	}
+	if manual {
+		g.logf("checking for updates")
+		g.busy(false, work, done)
+		return
+	}
+	go func() {
+		work()
+		fyne.Do(func() { done(nil) })
+	}()
+}
+
+func (g *gui) offerUpdates(found []foundUpdate) {
+	var b strings.Builder
+	for _, f := range found {
+		fmt.Fprintf(&b, "%s: %s → %s\n%s\n\n", f.m.Title(), f.m.Manifest.Version, f.u.Version, f.notes)
+	}
+	text := widget.NewLabel(strings.TrimSpace(b.String()))
+	text.Wrapping = fyne.TextWrapWord
+	scroll := container.NewVScroll(text)
+	scroll.SetMinSize(fyne.NewSize(600, 360))
+	title := fmt.Sprintf("%d mod updates", len(found))
+	if len(found) == 1 {
+		title = "1 mod update"
+	}
+	dialog.ShowCustomConfirm(title, "Install", "Later", scroll, func(ok bool) {
+		if !ok {
+			return
 		}
-		text := widget.NewLabel(strings.TrimSpace(b.String()))
-		text.Wrapping = fyne.TextWrapWord
-		scroll := container.NewVScroll(text)
-		scroll.SetMinSize(fyne.NewSize(600, 360))
-		dialog.ShowCustomConfirm(fmt.Sprintf("%d updates", len(updates)), "Install", "Later", scroll, func(ok bool) {
-			if !ok {
-				return
+		g.busy(false, func() error {
+			for _, f := range found {
+				if err := installUpdate(g.ctx, g.cfg, f.m, f.u); err != nil {
+					return err
+				}
+				g.logf("%s updated to %s", f.m.Dir, f.u.Version)
 			}
-			g.busy(false, func() error {
-				for _, f := range updates {
-					if err := installUpdate(g.ctx, g.cfg, f.m, f.u); err != nil {
-						return err
-					}
-					g.logf("%s updated to %s", f.m.Dir, f.u.Version)
-				}
-				return nil
-			}, func(err error) {
-				if err != nil {
-					g.showError(err)
-				}
-				g.reload()
-			})
-		}, g.win)
-	})
+			return nil
+		}, func(err error) {
+			if err != nil {
+				g.showError(err)
+			}
+			g.updates = nil
+			g.reload()
+		})
+	}, g.win)
 }
 
 func (g *gui) deployer() *Deployer {

@@ -101,6 +101,12 @@ func status(cfg *Config) error {
 	if err != nil {
 		return err
 	}
+	available := map[string]string{} // mod folder -> newer version
+	if cfg.CheckUpdates {
+		for _, f := range findUpdates(context.Background(), mods, func(string, ...any) {}) {
+			available[f.m.Dir] = f.u.Version
+		}
+	}
 	line, pending := deployStatus(cfg, st, mods)
 	if pending {
 		line += " (h3mod deploy applies them)"
@@ -118,7 +124,11 @@ func status(cfg *Config) error {
 			fmt.Println("disabled:")
 		}
 		name := fmt.Sprintf("%s (%s)", m.Title(), m.Dir)
-		if s := modDeployStatus(cfg, st, m); s != "" {
+		s := modDeployStatus(cfg, st, m)
+		if v, ok := available[m.Dir]; ok {
+			s = strings.TrimPrefix(s+"; update to "+v+" available (h3mod updates)", "; ")
+		}
+		if s != "" {
 			fmt.Printf("  %2d. %-*s  %s\n", i+1, width, name, s)
 		} else {
 			fmt.Printf("  %2d. %s\n", i+1, name)
@@ -245,23 +255,26 @@ func updatesCmd(ctx context.Context, cfg *Config) error {
 	}
 	checked := 0
 	for _, m := range mods {
-		if m.Manifest == nil || m.Manifest.UpdateCheck == "" {
-			continue
-		}
-		checked++
-		u, newer, err := checkUpdate(ctx, m)
-		switch {
-		case err != nil:
-			fmt.Printf("%s: %v\n", m.Dir, err)
-		case newer:
-			fmt.Printf("%s: %s -> %s\n", m.Dir, m.Manifest.Version, u.Version)
-			printIndented(changelog(ctx, m, u))
-		default:
-			fmt.Printf("%s: %s is the latest\n", m.Dir, m.Manifest.Version)
+		if m.Manifest != nil && m.Manifest.UpdateCheck != "" {
+			checked++
 		}
 	}
-	fmt.Printf("checked %d of %d mods (others have no update URL)\n", checked, len(mods))
-	return nil
+	found := findUpdates(ctx, mods, func(f string, a ...any) { fmt.Printf(f+"\n", a...) })
+	for _, f := range found {
+		fmt.Printf("%s: %s -> %s\n", f.m.Dir, f.m.Manifest.Version, f.u.Version)
+		printIndented(f.notes)
+	}
+	fmt.Printf("checked %d of %d mods (others have no update URL), %d updates\n", checked, len(mods), len(found))
+	if len(found) == 0 || !confirm(fmt.Sprintf("Install %d updates?", len(found))) {
+		return nil
+	}
+	for _, f := range found {
+		if err := installUpdate(ctx, cfg, f.m, f.u); err != nil {
+			return err
+		}
+		fmt.Printf("%s: updated to %s\n", f.m.Dir, f.u.Version)
+	}
+	return syncMods(cfg)
 }
 
 func printIndented(s string) {

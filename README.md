@@ -108,7 +108,7 @@ to `h3mod.log` next to the config.
     move <mod> <position>
     install [--name n] [--replace] <archive|rpkg>
     remove <mod>... [--yes]        delete mods from the mods folder (GUI: Delete mod…)
-    updates                        check mods' update URLs, with release notes
+    updates                        check mods' update URLs, with release notes, and offer to install
     update <mod>...                download and install new versions
     options <mod>                  list options and what is selected
     option <mod> <option> [on|off] select ("Group:Name" for choices)
@@ -164,6 +164,7 @@ one, these defaults apply; relative paths are relative to the config.
       "enabled": ["Mod A", ...],  // folder names, in load order; later wins
       "options": {...},           // chosen options per mod
       "skipIntro": false,         // the intro is skipped unless this is false
+      "checkUpdates": true,       // check mods for updates in status and on GUI start (off by default)
       "deploySummary": "...",     // see Peacock below; "off" to disable
       "known": [...]              // mod folders seen so far (managed by h3mod)
     }

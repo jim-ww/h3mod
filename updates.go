@@ -133,6 +133,31 @@ func changelog(ctx context.Context, m *Mod, u modUpdate) string {
 	return strings.TrimSpace(u.Changelog)
 }
 
+// foundUpdate is a newer version of a mod, with what changed.
+type foundUpdate struct {
+	m     *Mod
+	u     modUpdate
+	notes string
+}
+
+// findUpdates checks the mods that have an update URL; failures go to logf.
+func findUpdates(ctx context.Context, mods []*Mod, logf func(string, ...any)) []foundUpdate {
+	var out []foundUpdate
+	for _, m := range mods {
+		if m.Manifest == nil || m.Manifest.UpdateCheck == "" {
+			continue
+		}
+		u, newer, err := checkUpdate(ctx, m)
+		switch {
+		case err != nil:
+			logf("%s: %v", m.Dir, err)
+		case newer:
+			out = append(out, foundUpdate{m, u, changelog(ctx, m, u)})
+		}
+	}
+	return out
+}
+
 // installUpdate downloads an update and installs it into the mod's folder.
 func installUpdate(ctx context.Context, cfg *Config, m *Mod, u modUpdate) error {
 	work := cfg.abs(filepath.Join("cache", "work"))
