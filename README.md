@@ -47,7 +47,7 @@ HITMAN 3 folder, next to `mods/`. Relative paths are relative to the config.
 
 ## Commands
 
-    status                         mods in load order, options, problems
+    status                         mods in load order, options, problems (also with no command)
     enable <mod>... | all / disable <mod>... | all
     move <mod> <position>
     install [-name n] [-replace] <archive|rpkg>

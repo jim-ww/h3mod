@@ -19,7 +19,9 @@ import (
 	"syscall"
 )
 
-const usage = `usage: h3mod [-config h3mod.json] <command> [args]
+const usage = `usage: h3mod [-config h3mod.json] [command] [args]
+
+Without a command, h3mod shows status.
 
 mods:
   status                       list enabled and disabled mods, options, problems
@@ -63,15 +65,14 @@ func run(ctx context.Context, args []string) error {
 	if err := fl.Parse(args); err != nil {
 		return err
 	}
-	if fl.NArg() == 0 {
-		fl.Usage()
-		return errors.New("no command")
-	}
 	cfg, err := loadConfig(*cfgPath)
 	if err != nil {
 		return err
 	}
-	cmd, rest := fl.Arg(0), fl.Args()[1:]
+	cmd, rest := "status", []string(nil)
+	if fl.NArg() > 0 {
+		cmd, rest = fl.Arg(0), fl.Args()[1:]
+	}
 	if cmd == "help" {
 		fmt.Print(usage)
 		return nil
@@ -155,7 +156,7 @@ func status(cfg *Config) error {
 			fmt.Printf("      options: %s\n", strings.Join(sel, ", "))
 		}
 	}
-	fmt.Println("mods can be named by number, folder, ID or a unique part of the name")
+	fmt.Println("mods can be named by number, folder, ID or a unique part of the name; h3mod help lists commands")
 	p, err := buildPlan(cfg, newGameData(cfg), false)
 	if err != nil {
 		return err
