@@ -25,7 +25,8 @@ type Config struct {
 	// gets enabled.
 	Known []string `json:"known"`
 
-	path string
+	path  string
+	fresh bool // there was no config file
 }
 
 func loadConfig(path string) (*Config, error) {
@@ -36,6 +37,7 @@ func loadConfig(path string) (*Config, error) {
 	c := &Config{Game: "..", Mods: "mods", path: path}
 	b, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
+		c.fresh = true
 		return c, nil
 	}
 	if err != nil {

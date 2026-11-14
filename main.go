@@ -6,6 +6,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -86,6 +87,9 @@ func run(ctx context.Context, args []string) error {
 	default: // commands that change something
 		openRunLog(cfg, fmt.Sprintf("h3mod %s: %s", version, strings.Join(args, " ")))
 	}
+	if err := firstRun(cfg); err != nil {
+		return err
+	}
 	if err := syncMods(cfg); err != nil {
 		return err
 	}
@@ -153,6 +157,36 @@ func terminalProgress(d *Deployer) {
 		}
 		log(format, args...)
 	}
+}
+
+// firstRun offers SMF's mods folder when there is no config yet, asking on
+// a terminal, and creates the mods folder otherwise.
+func firstRun(cfg *Config) error {
+	if !cfg.fresh {
+		return nil
+	}
+	if dir := cfg.smfMods(); dir != "" {
+		use := false
+		if st, err := os.Stdin.Stat(); err == nil && st.Mode()&os.ModeCharDevice != 0 {
+			fmt.Printf("Found SMF's mods folder at %s.\nUse it, with SMF's load order and options? [Y/n] ", dir)
+			answer, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+			answer = strings.ToLower(strings.TrimSpace(answer))
+			use = answer == "" || answer == "y" || answer == "yes"
+		} else {
+			fmt.Printf("note: SMF's mods folder is at %s; set \"mods\" in %s to use it\n", dir, cfg.path)
+		}
+		if use {
+			notes, err := cfg.useSMFMods(dir)
+			for _, n := range notes {
+				fmt.Println("note:", n)
+			}
+			return err
+		}
+	}
+	if err := os.MkdirAll(cfg.abs(cfg.Mods), 0o755); err != nil {
+		return err
+	}
+	return cfg.save()
 }
 
 // syncMods updates the config from the mods directory and says what changed.

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -120,4 +121,33 @@ func relaxedJSON(b []byte) []byte {
 
 func isIdentStart(c byte) bool {
 	return c == '_' || c == '$' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
+// smfMods returns SMF's mods folder when it's worth offering on a first run:
+// the config is new and the game folder has an SMF install with mods.
+func (c *Config) smfMods() string {
+	dir := filepath.Join(c.abs(c.Game), "SMF", "Mods")
+	if !c.fresh || c.abs(c.Mods) == dir {
+		return ""
+	}
+	if mods, err := discoverMods(dir); err != nil || len(mods) == 0 {
+		return ""
+	}
+	return dir
+}
+
+// useSMFMods switches to SMF's mods folder and takes SMF's load order and
+// options when it has a config.
+func (c *Config) useSMFMods(dir string) ([]string, error) {
+	c.Mods = dir
+	var notes []string
+	smfConfig := filepath.Join(filepath.Dir(dir), "config.json")
+	if _, err := os.Stat(smfConfig); err == nil {
+		var err error
+		if notes, err = importSMF(c, smfConfig); err != nil {
+			return nil, err
+		}
+		notes = append(notes, fmt.Sprintf("took load order and options from %s", smfConfig))
+	}
+	return notes, c.save()
 }
