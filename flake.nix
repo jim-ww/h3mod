@@ -181,6 +181,7 @@
           cp -r ${legacy-quickentity} $d/data/legacy-quickentity
           gzip -9 < ${path-list}/hash_list.txt > $d/data/hash_list.txt.gz
           cp ${./README.md} $d/README.md
+          cp ${./LICENSE} $d/LICENSE
           chmod -R u+w $d
           chmod +x $d/h3mod $d/tools/{quickentity-rs,quickentity-3,xdelta3,7zz,ResourceTool}
           tar czf $out/$d.tar.gz $d

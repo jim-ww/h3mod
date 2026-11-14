@@ -124,3 +124,10 @@ inputs;
 `state.json` records deployed archives so unchanged ones are not rewritten.
 Both can be deleted at any time. `clean/` keeps the vanilla
 packagedefinition and thumbs.dat and must be kept.
+
+## License
+
+GPL-3.0, see `LICENSE`. The bundle also ships third-party tools under their
+own licenses: ResourceTool (`tools/ResourceTool-LICENSE`), 7-Zip
+(`tools/7-Zip-License.txt`) and SMF's QuickEntity scripts (LGPL-3.0,
+`data/legacy-quickentity/COPYING.LESSER`).
