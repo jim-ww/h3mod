@@ -3,20 +3,14 @@
 Deploys HITMAN 3 mods from a folder of unpacked mods. Reads SMF (Simple Mod
 Framework) mods and plain rpkg mods as they are.
 
-Base game archives are never written. A deploy writes `chunkNpatch300.rpkg`
-archives, `packagedefinition.txt` and `thumbs.dat`, each to a temp file
-first and renamed into place, archives first. An interrupted deploy leaves the
-game as it was; the next deploy cleans up. `undeploy` restores vanilla.
-
 ## Running
 
-### On other Linux systems
+### Non-Linux systems
 
 `nix build .#bundle` makes `result/h3mod-linux-x64.tar.gz`: the h3mod
 binary with every tool and hash list it needs in `tools/` and `data/`. It
-runs on any x86_64 Linux with glibc 2.34+ (ResourceTool is the upstream
-build); on NixOS use the flake instead. Unpack it anywhere and, from a
-folder holding `h3mod.json`:
+runs on any x86_64 Linux with glibc 2.34+; on NixOS use the flake instead. Unpack it anywhere and, from a
+directory holding `h3mod.json`:
 
     /path/to/h3mod-linux-x64/h3mod status
 
@@ -68,7 +62,7 @@ deleted ones drop out of it. On a first run every mod is enabled.
 
 `install` takes what SMF's Mod Manager does: archives of framework mod
 folders, or `.rpkg` files (loose or archived) that become an rpkg mod named
-by `-name`. Archives are unpacked with 7-Zip into a hidden folder in the mods
+by `-name`. Archives are unpacked into a hidden folder in the mods
 directory, checked (manifests, content folders, no links) and moved into
 place. `update` installs into the mod's existing folder, keeping its place
 in the load order and its options.
@@ -125,9 +119,14 @@ inputs;
 Both can be deleted at any time. `clean/` keeps the vanilla
 packagedefinition and thumbs.dat and must be kept.
 
+## Support the project
+
+If h3mod saves you time, consider a small donation.
+
+**Monero (XMR)**
+
+`83YGRqP8uHed6NeegZQeX9ccCxbzoRHHEEi7pTwk4aqdJZEVXXA6NWtetnsEM2v33zFBBt3Rp6DNhU9qhJEGPspU14yN8t7`
+
 ## License
 
-GPL-3.0, see `LICENSE`. The bundle also ships third-party tools under their
-own licenses: ResourceTool (`tools/ResourceTool-LICENSE`), 7-Zip
-(`tools/7-Zip-License.txt`) and SMF's QuickEntity scripts (LGPL-3.0,
-`data/legacy-quickentity/COPYING.LESSER`).
+GPL-3.0. Free to use, study, share, and modify — provided you keep the same freedoms for others.
