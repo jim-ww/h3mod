@@ -3,9 +3,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"flag"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -27,21 +30,64 @@ import (
 // user config folder when that isn't writable), so unpacking the release
 // into the HITMAN 3 folder and starting it is all the setup there is.
 
+const guiUsage = `usage: h3mod-gui [-config h3mod.json] [-game dir] [-mods dir]
+
+  -config  config file (default: h3mod.json next to the program)
+  -game    HITMAN 3 folder; saved to the config
+  -mods    folder of unpacked mods; saved to the config
+`
+
 func main() {
+	fl := flag.NewFlagSet("h3mod-gui", flag.ContinueOnError)
+	var out bytes.Buffer
+	fl.SetOutput(&out)
+	fl.Usage = func() { out.WriteString(guiUsage) }
+	cfgPath := fl.String("config", guiConfigPath(), "")
+	game := fl.String("game", "", "")
+	mods := fl.String("mods", "", "")
+	flagErr := fl.Parse(os.Args[1:])
+
 	a := app.NewWithID("io.github.jim-ww.h3mod")
 	g := &gui{app: a, win: a.NewWindow("h3mod " + version), ctx: context.Background()}
-	cfg, err := loadConfig(guiConfigPath())
-	g.cfg = cfg
-	g.build()
 	g.win.Resize(fyne.NewSize(1000, 680))
-	if err != nil {
-		g.win.Show()
-		dialog.ShowError(err, g.win)
-		a.Run()
-		return
+	if flagErr != nil {
+		// Windows GUI programs have no console, so the help goes in a window.
+		fmt.Fprint(os.Stderr, out.String())
+		g.win.SetContent(container.NewPadded(widget.NewLabelWithStyle(out.String(), fyne.TextAlignLeading, fyne.TextStyle{Monospace: true})))
+		g.win.Resize(fyne.NewSize(560, 200))
+		g.win.ShowAndRun()
+		if errors.Is(flagErr, flag.ErrHelp) {
+			return
+		}
+		os.Exit(2)
 	}
+
+	cfg, err := loadConfig(*cfgPath)
+	if err != nil {
+		g.win.SetContent(widget.NewLabel(err.Error()))
+		g.win.ShowAndRun()
+		os.Exit(1)
+	}
+	g.cfg = cfg
+	for _, f := range []struct {
+		val string
+		dst *string
+	}{{*game, &cfg.Game}, {*mods, &cfg.Mods}} {
+		if f.val != "" {
+			abs, _ := filepath.Abs(f.val)
+			*f.dst = abs
+		}
+	}
+	if *game != "" || *mods != "" {
+		cfg.fresh = false // folders given: nothing to offer
+		if err := cfg.save(); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+		}
+	}
+	openRunLog(cfg, "h3mod-gui "+version)
+	g.build()
 	g.win.Show()
-	g.ensureGame(g.reload)
+	g.ensureGame(func() { g.firstRun(g.reload) })
 	a.Run()
 }
 
@@ -75,7 +121,9 @@ type gui struct {
 	modsLabel *widget.Label
 	logText   *widget.Label
 	logScroll *container.Scroll
-	progress  *widget.ProgressBarInfinite
+	status    *widget.Label // current step, or a drag hint
+	working   *widget.ProgressBarInfinite
+	progress  *widget.ProgressBar
 	actions   []fyne.Disableable
 }
 
@@ -87,21 +135,8 @@ func (g *gui) build() {
 
 	g.list = widget.NewList(
 		func() int { return len(g.mods) },
-		func() fyne.CanvasObject {
-			name := widget.NewLabel("")
-			name.Truncation = fyne.TextTruncateEllipsis
-			return container.NewBorder(nil, nil, widget.NewCheck("", nil), nil, name)
-		},
-		func(id widget.ListItemID, o fyne.CanvasObject) {
-			m := g.mods[id]
-			c := o.(*fyne.Container)
-			name := c.Objects[0].(*widget.Label)
-			check := c.Objects[1].(*widget.Check)
-			name.SetText(modLine(m))
-			check.OnChanged = nil
-			check.SetChecked(g.cfg.isEnabled(m.Dir))
-			check.OnChanged = func(on bool) { g.setEnabled(m, on) }
-		},
+		func() fyne.CanvasObject { return newModRow(g) },
+		func(id widget.ListItemID, o fyne.CanvasObject) { o.(*modRow).set(id) },
 	)
 	g.list.OnSelected = func(id widget.ListItemID) {
 		if id < len(g.mods) {
@@ -116,11 +151,12 @@ func (g *gui) build() {
 	deploy := widget.NewButtonWithIcon("Deploy", theme.ConfirmIcon(), func() { g.deploy(false) })
 	deploy.Importance = widget.HighImportance
 	undeploy := widget.NewButtonWithIcon("Restore vanilla", theme.HistoryIcon(), g.undeploy)
-	skipIntro := widget.NewCheck("Skip intro", func(on bool) {
+	skipIntro := widget.NewCheck("Skip intro", nil)
+	skipIntro.Checked = g.cfg.skipIntro() // before OnChanged, which saves
+	skipIntro.OnChanged = func(on bool) {
 		g.cfg.SkipIntro = &on
 		g.saveConfig()
-	})
-	skipIntro.SetChecked(g.cfg.skipIntro())
+	}
 	g.actions = []fyne.Disableable{install, updates, deploy, undeploy}
 
 	folders := container.New(layout.NewFormLayout(),
@@ -129,14 +165,18 @@ func (g *gui) build() {
 	)
 	top := container.NewVBox(folders, container.NewHBox(install, updates, layout.NewSpacer(), skipIntro))
 
-	g.logText = widget.NewLabel("Drop mod archives on this window to install them.")
+	g.logText = widget.NewLabel("Drop mod archives on this window to install them. Drag mods to change the load order.")
 	g.logText.Wrapping = fyne.TextWrapWord
 	g.logText.TextStyle = fyne.TextStyle{Monospace: true}
 	g.logScroll = container.NewVScroll(g.logText)
 	g.logScroll.SetMinSize(fyne.NewSize(0, 140))
-	g.progress = widget.NewProgressBarInfinite()
+	g.status = widget.NewLabel("")
+	g.working = widget.NewProgressBarInfinite()
+	g.working.Hide()
+	g.progress = widget.NewProgressBar()
 	g.progress.Hide()
-	bottom := container.NewVBox(container.NewHBox(deploy, undeploy), g.progress, g.logScroll)
+	bars := container.NewStack(g.working, g.progress)
+	bottom := container.NewVBox(container.NewHBox(deploy, undeploy, g.status), bars, g.logScroll)
 
 	split := container.NewHSplit(g.list, container.NewVScroll(container.NewPadded(g.details)))
 	split.Offset = 0.45
@@ -147,6 +187,64 @@ func (g *gui) build() {
 		}
 	})
 	g.updateFolders()
+}
+
+// modRow is a line in the mod list: drag it up or down to change the load
+// order.
+type modRow struct {
+	widget.BaseWidget
+	g      *gui
+	id     int
+	check  *widget.Check
+	name   *widget.Label
+	dragDY float32
+}
+
+func newModRow(g *gui) *modRow {
+	r := &modRow{g: g, check: widget.NewCheck("", nil), name: widget.NewLabel("")}
+	r.name.Truncation = fyne.TextTruncateEllipsis
+	r.ExtendBaseWidget(r)
+	return r
+}
+
+func (r *modRow) CreateRenderer() fyne.WidgetRenderer {
+	return widget.NewSimpleRenderer(container.NewBorder(nil, nil, r.check, nil, r.name))
+}
+
+func (r *modRow) set(id int) {
+	r.id = id
+	m := r.g.mods[id]
+	r.name.SetText(modLine(m))
+	r.check.OnChanged = nil
+	r.check.SetChecked(r.g.cfg.isEnabled(m.Dir))
+	r.check.OnChanged = func(on bool) { r.g.setEnabled(m, on) }
+}
+
+func (r *modRow) Dragged(e *fyne.DragEvent) {
+	r.dragDY += e.Dragged.DY
+	if to, ok := r.g.dropTarget(r.id, r.dragDY, r.Size().Height); ok {
+		r.g.status.SetText(fmt.Sprintf("Move %s to load order %d", r.g.mods[r.id].Title(), to+1))
+	}
+}
+
+func (r *modRow) DragEnd() {
+	dy := r.dragDY
+	r.dragDY = 0
+	r.g.status.SetText("")
+	if to, ok := r.g.dropTarget(r.id, dy, r.Size().Height); ok {
+		r.g.moveTo(r.g.mods[r.id], to)
+	}
+}
+
+// dropTarget is the load order position a mod dragged by dy lands on. Only
+// enabled mods have a place in the load order.
+func (g *gui) dropTarget(id int, dy, rowHeight float32) (int, bool) {
+	if id >= len(g.cfg.Enabled) || rowHeight <= 0 {
+		return 0, false
+	}
+	pitch := rowHeight + theme.SeparatorThicknessSize()
+	to := id + int(math.Round(float64(dy/pitch)))
+	return max(0, min(to, len(g.cfg.Enabled)-1)), true
 }
 
 func modLine(m *Mod) string {
@@ -164,15 +262,44 @@ func (g *gui) updateFolders() {
 
 func (g *gui) logf(format string, args ...any) {
 	line := fmt.Sprintf(format, args...)
+	logLine("%s", line)
 	fyne.Do(func() {
 		g.logText.SetText(strings.TrimLeft(g.logText.Text+"\n"+line, "\n"))
 		g.logScroll.ScrollToBottom()
 	})
 }
 
+// showError shows the first line of an error, with the rest under Details
+// and a button to copy it all; the whole error also goes to the log.
+func (g *gui) showError(err error) {
+	msg := err.Error()
+	g.logf("error: %s", msg) // also to the log file
+	summary, details, _ := strings.Cut(msg, "\n")
+	content := container.NewVBox()
+	s := widget.NewLabel(summary)
+	s.Wrapping = fyne.TextWrapWord
+	content.Add(s)
+	if details != "" {
+		d := widget.NewLabelWithStyle(strings.TrimSpace(details), fyne.TextAlignLeading, fyne.TextStyle{Monospace: true})
+		d.Wrapping = fyne.TextWrapWord
+		scroll := container.NewVScroll(d)
+		scroll.SetMinSize(fyne.NewSize(640, 220))
+		content.Add(widget.NewAccordion(widget.NewAccordionItem("Details", scroll)))
+	}
+	copyBtn := widget.NewButtonWithIcon("Copy", theme.ContentCopyIcon(), func() {
+		g.app.Clipboard().SetContent(msg)
+	})
+	note := widget.NewLabel("Also written to " + g.cfg.abs("h3mod.log"))
+	note.Importance = widget.LowImportance
+	content.Add(container.NewHBox(copyBtn, note))
+	d := dialog.NewCustom("Something went wrong", "Close", content, g.win)
+	d.Resize(fyne.NewSize(700, 0))
+	d.Show()
+}
+
 func (g *gui) saveConfig() {
 	if err := g.cfg.save(); err != nil {
-		dialog.ShowError(err, g.win)
+		g.showError(err)
 	}
 }
 
@@ -192,14 +319,48 @@ func (g *gui) ensureGame(next func()) {
 	for _, dir := range steamGameDirs() {
 		if isGame(dir) {
 			g.cfg.Game = dir
-			g.saveConfig()
+			if !g.cfg.fresh {
+				g.saveConfig()
+			}
 			g.updateFolders()
 			next()
 			return
 		}
 	}
 	dialog.ShowInformation("Where is HITMAN 3?", "Choose the HITMAN 3 game folder (the one with Retail and Runtime in it).", g.win)
-	g.pickGame()
+	g.pickGameThen(next)
+}
+
+// firstRun offers SMF's mods folder when there is no config yet, then runs
+// next.
+func (g *gui) firstRun(next func()) {
+	if !g.cfg.fresh {
+		next()
+		return
+	}
+	dir := g.cfg.smfMods()
+	if dir == "" {
+		g.saveConfig()
+		next()
+		return
+	}
+	dialog.ShowConfirm("Use SMF's mods?",
+		fmt.Sprintf("Found Simple Mod Framework's mods folder:\n%s\n\nUse it, with SMF's load order and options?\nOtherwise h3mod keeps its own mods folder.", dir),
+		func(yes bool) {
+			if yes {
+				notes, err := g.cfg.useSMFMods(dir)
+				for _, n := range notes {
+					g.logf("%s", n)
+				}
+				if err != nil {
+					g.showError(err)
+				}
+				g.updateFolders()
+			} else {
+				g.saveConfig()
+			}
+			next()
+		}, g.win)
 }
 
 func steamGameDirs() []string {
@@ -216,19 +377,23 @@ func steamGameDirs() []string {
 	return out
 }
 
-func (g *gui) pickGame() {
+func (g *gui) pickGame() { g.pickGameThen(g.reload) }
+
+func (g *gui) pickGameThen(next func()) {
 	dialog.ShowFolderOpen(func(u fyne.ListableURI, err error) {
 		if err != nil || u == nil {
 			return
 		}
 		if !isGame(u.Path()) {
-			dialog.ShowError(fmt.Errorf("%s is not a HITMAN 3 folder: it has no Runtime/chunk0.rpkg", u.Path()), g.win)
+			g.showError(fmt.Errorf("%s is not a HITMAN 3 folder: it has no Runtime/chunk0.rpkg", u.Path()))
 			return
 		}
 		g.cfg.Game = u.Path()
-		g.saveConfig()
+		if !g.cfg.fresh {
+			g.saveConfig()
+		}
 		g.updateFolders()
-		g.reload()
+		next()
 	}, g.win)
 }
 
@@ -247,12 +412,12 @@ func (g *gui) pickMods() {
 // reload reads the mods folder again, enabling new mods like the CLI does.
 func (g *gui) reload() {
 	if err := os.MkdirAll(g.cfg.abs(g.cfg.Mods), 0o755); err != nil {
-		dialog.ShowError(err, g.win)
+		g.showError(err)
 		return
 	}
 	mods, notes, err := g.cfg.syncMods()
 	if err != nil {
-		dialog.ShowError(err, g.win)
+		g.showError(err)
 		return
 	}
 	for _, n := range notes {
@@ -277,17 +442,16 @@ func (g *gui) setEnabled(m *Mod, on bool) {
 	g.reload()
 }
 
-// move shifts an enabled mod by delta places in the load order.
-func (g *gui) move(m *Mod, delta int) {
+// moveTo puts an enabled mod at a load order position.
+func (g *gui) moveTo(m *Mod, to int) {
 	i := slices.Index(g.cfg.Enabled, m.Dir)
-	j := i + delta
-	if i < 0 || j < 0 || j >= len(g.cfg.Enabled) {
+	if i < 0 || i == to || to < 0 || to >= len(g.cfg.Enabled) {
 		return
 	}
-	g.cfg.Enabled[i], g.cfg.Enabled[j] = g.cfg.Enabled[j], g.cfg.Enabled[i]
+	g.cfg.Enabled = slices.Insert(slices.Delete(g.cfg.Enabled, i, i+1), to, m.Dir)
 	g.saveConfig()
 	g.reload()
-	if k := slices.Index(g.mods, m); k >= 0 {
+	if k := slices.IndexFunc(g.mods, func(x *Mod) bool { return x.Dir == m.Dir }); k >= 0 {
 		g.list.Select(k)
 	}
 }
@@ -323,8 +487,8 @@ func (g *gui) showDetails() {
 	}
 
 	if i := slices.Index(g.cfg.Enabled, m.Dir); i >= 0 {
-		up := widget.NewButtonWithIcon("Load earlier", theme.MoveUpIcon(), func() { g.move(m, -1) })
-		down := widget.NewButtonWithIcon("Load later", theme.MoveDownIcon(), func() { g.move(m, 1) })
+		up := widget.NewButtonWithIcon("Load earlier", theme.MoveUpIcon(), func() { g.moveTo(m, i-1) })
+		down := widget.NewButtonWithIcon("Load later", theme.MoveDownIcon(), func() { g.moveTo(m, i+1) })
 		if i == 0 {
 			up.Disable()
 		}
@@ -345,7 +509,7 @@ func (g *gui) showDetails() {
 	sel, _ := g.cfg.selection(m)
 	setOption := func(key string, on bool) {
 		if err := g.cfg.setOption(m, key, on); err != nil {
-			dialog.ShowError(err, g.win)
+			g.showError(err)
 			return
 		}
 		g.saveConfig()
@@ -402,7 +566,7 @@ func (g *gui) remove(m *Mod) {
 			return
 		}
 		if err := os.RemoveAll(m.Path); err != nil {
-			dialog.ShowError(err, g.win)
+			g.showError(err)
 		}
 		g.sel = nil
 		g.reload()
@@ -422,25 +586,33 @@ func (g *gui) pickInstall() {
 	d.Show()
 }
 
-// busy runs work in the background with the action buttons disabled.
-func (g *gui) busy(work func() error, done func(error)) {
+// busy runs work in the background with the action buttons disabled. Work
+// that reports progress gets a bar that fills; other work an animated one.
+func (g *gui) busy(withProgress bool, work func() error, done func(error)) {
 	for _, a := range g.actions {
 		a.Disable()
 	}
-	g.progress.Show()
-	g.progress.Start()
+	if withProgress {
+		g.progress.SetValue(0)
+		g.progress.Show()
+	} else {
+		g.working.Show()
+		g.working.Start()
+	}
 	go func() {
 		err := work()
 		fyne.Do(func() {
-			g.progress.Stop()
+			g.working.Stop()
+			g.working.Hide()
 			g.progress.Hide()
+			g.status.SetText("")
 			for _, a := range g.actions {
 				a.Enable()
 			}
 			if done != nil {
 				done(err)
 			} else if err != nil {
-				dialog.ShowError(err, g.win)
+				g.showError(err)
 			}
 		})
 	}()
@@ -448,8 +620,9 @@ func (g *gui) busy(work func() error, done func(error)) {
 
 func (g *gui) install(path string) {
 	name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	logLine("install %s", path)
 	g.logf("installing %s", filepath.Base(path))
-	g.busy(func() error {
+	g.busy(false, func() error {
 		dirs, err := installMods(g.ctx, g.cfg, path, name, false, "", "")
 		for _, d := range dirs {
 			g.logf("installed %s", d)
@@ -457,7 +630,7 @@ func (g *gui) install(path string) {
 		return err
 	}, func(err error) {
 		if err != nil {
-			dialog.ShowError(err, g.win)
+			g.showError(err)
 		}
 		g.reload()
 	})
@@ -471,7 +644,7 @@ func (g *gui) checkUpdates() {
 	}
 	var updates []found
 	g.logf("checking for updates")
-	g.busy(func() error {
+	g.busy(false, func() error {
 		for _, m := range g.mods {
 			if m.Manifest == nil || m.Manifest.UpdateCheck == "" {
 				continue
@@ -502,7 +675,7 @@ func (g *gui) checkUpdates() {
 			if !ok {
 				return
 			}
-			g.busy(func() error {
+			g.busy(false, func() error {
 				for _, f := range updates {
 					if err := installUpdate(g.ctx, g.cfg, f.m, f.u); err != nil {
 						return err
@@ -512,7 +685,7 @@ func (g *gui) checkUpdates() {
 				return nil
 			}, func(err error) {
 				if err != nil {
-					dialog.ShowError(err, g.win)
+					g.showError(err)
 				}
 				g.reload()
 			})
@@ -523,12 +696,21 @@ func (g *gui) checkUpdates() {
 func (g *gui) deployer() *Deployer {
 	d := newDeployer(g.cfg)
 	d.log = g.logf
+	d.progress = func(step string, done, total int) {
+		fyne.Do(func() {
+			g.status.SetText(fmt.Sprintf("%s %d/%d", step, done, total))
+			if total > 0 {
+				g.progress.SetValue(float64(done) / float64(total))
+			}
+		})
+	}
 	return d
 }
 
 func (g *gui) deploy(skipUnsupported bool) {
+	logLine("deploy")
 	g.logf("deploying")
-	g.busy(func() error {
+	g.busy(true, func() error {
 		return g.deployer().Deploy(g.ctx, skipUnsupported, "")
 	}, func(err error) {
 		switch {
@@ -541,7 +723,7 @@ func (g *gui) deploy(skipUnsupported bool) {
 					}
 				}, g.win)
 		case err != nil:
-			dialog.ShowError(err, g.win)
+			g.showError(err)
 		default:
 			g.reload() // deploy may sort the load order
 		}
@@ -551,7 +733,8 @@ func (g *gui) deploy(skipUnsupported bool) {
 func (g *gui) undeploy() {
 	dialog.ShowConfirm("Restore vanilla", "Remove all deployed mods from the game? Your mods folder isn't touched.", func(ok bool) {
 		if ok {
-			g.busy(g.deployer().Undeploy, nil)
+			logLine("undeploy")
+			g.busy(false, g.deployer().Undeploy, nil)
 		}
 	}, g.win)
 }
