@@ -145,20 +145,53 @@
       '';
 
       # static, so the same binary runs on any x86_64 Linux
+      version = pkgs.lib.fileContents ./VERSION;
+
       h3mod-bin = pkgs.buildGoModule {
         pname = "h3mod";
-        version = "0.1.0";
+        inherit version;
         src = self;
-        vendorHash = "sha256-UjADC7lcXCJqer2VvsGkKD/JOhEn0oK0JJuA5MlaAWg=";
+        vendorHash = "sha256-Vod5Hnp7v93FvHW8J1BZm9OpAftI5XEaaaBFWy1JLaU=";
         env.CGO_ENABLED = 0;
-        ldflags = [ "-s" "-w" ];
+        ldflags = [ "-s" "-w" "-X main.version=${version}" ];
         doCheck = false;
       };
+      h3mod-windows = h3mod-bin.overrideAttrs (old: {
+        env = old.env // { GOOS = "windows"; GOARCH = "amd64"; };
+      });
+
+      # Windows tools: ResourceTool from the same ZHMTools release, the rest
+      # as SMF's Windows release ships them
+      smf-release = pkgs.fetchurl {
+        url = "https://github.com/atampy25/simple-mod-framework/releases/download/2.33.45/Release.zip";
+        hash = "sha256-WDwD0JgVThjHkp5/EKJ+IWcn+n2gthCjMHD+rgyG4iA=";
+      };
+      resourcetool-win = pkgs.fetchurl {
+        url = "https://github.com/OrfeasZ/ZHMTools/releases/download/v4.3.0/ResourceTool-win-x64.zip";
+        hash = "sha256-Gafd4CBSEBpVxMzLp8NNTQ/60VBgX59v88EeKIy1UtM=";
+      };
+      windows-tools = pkgs.runCommand "h3mod-windows-tools" { nativeBuildInputs = [ pkgs._7zz ]; } ''
+        mkdir -p $out
+        7zz e -o$out ${smf-release} Third-Party/quickentity-rs.exe Third-Party/quickentity-3.exe \
+          Third-Party/xdelta3.exe Third-Party/xdelta3-LICENSE Third-Party/7z.exe Third-Party/7z.dll Third-Party/7z-LICENSE
+        7zz e -o$out ${resourcetool-win} ResourceTool.exe '*.dll'
+        cp ${resourcetool-bin}/LICENSE $out/ResourceTool-LICENSE
+      '';
+
+      # data/ of the bundles, and the files every bundle has
+      bundleCommon = d: ''
+        mkdir -p ${d}/tools ${d}/data
+        cp ${hash-list} ${d}/data/hash_list.hmla
+        cp -r ${legacy-quickentity} ${d}/data/legacy-quickentity
+        gzip -9 < ${path-list}/hash_list.txt > ${d}/data/hash_list.txt.gz
+        cp ${./README.md} ${d}/README.md
+        cp ${./LICENSE} ${d}/LICENSE
+      '';
     in
     {
       packages.${system} = {
         inherit quickentity quickentity-static quickentity3 quickentity3-static legacy-quickentity resourcetool;
-        default = pkgs.runCommand "h3mod-0.1.0" { nativeBuildInputs = [ pkgs.makeWrapper ]; } ''
+        default = pkgs.runCommand "h3mod-${version}" { nativeBuildInputs = [ pkgs.makeWrapper ]; } ''
           makeWrapper ${h3mod-bin}/bin/h3mod $out/bin/h3mod \
             --prefix PATH : ${pkgs.lib.makeBinPath [ quickentity quickentity3 resourcetool pkgs.xdelta pkgs._7zz ]} \
             --set-default H3MOD_HASH_LIST ${hash-list} \
@@ -166,25 +199,31 @@
             --set-default H3MOD_LEGACY_QN ${legacy-quickentity}
         '';
 
-        # Portable tarball for other Linux systems: h3mod finds tools/ and
-        # data/ next to itself. ResourceTool is the upstream build (glibc
-        # 2.34+, libstdc++); everything else is static.
-        bundle = pkgs.runCommand "h3mod-bundle-0.1.0" { } ''
+        # Portable archives: h3mod finds tools/ and data/ next to itself.
+        # On Linux, ResourceTool is the upstream build (glibc 2.34+,
+        # libstdc++) and everything else is static.
+        bundle = pkgs.runCommand "h3mod-linux-x64-${version}" { } ''
           d=h3mod-linux-x64
-          mkdir -p $d/tools $d/data $out
+          ${bundleCommon "$d"}
           cp ${h3mod-bin}/bin/h3mod $d/
           cp ${quickentity-static}/bin/quickentity-rs ${quickentity3-static}/bin/quickentity-3 ${pkgs.pkgsStatic.xdelta}/bin/xdelta3 \
             ${sevenzip-static}/bin/7zz ${resourcetool-bin}/ResourceTool ${resourcetool-bin}/*.so $d/tools/
           cp ${resourcetool-bin}/LICENSE $d/tools/ResourceTool-LICENSE
           cp ${sevenzip-static}/7-Zip-License.txt $d/tools/
-          cp ${hash-list} $d/data/hash_list.hmla
-          cp -r ${legacy-quickentity} $d/data/legacy-quickentity
-          gzip -9 < ${path-list}/hash_list.txt > $d/data/hash_list.txt.gz
-          cp ${./README.md} $d/README.md
-          cp ${./LICENSE} $d/LICENSE
           chmod -R u+w $d
           chmod +x $d/h3mod $d/tools/{quickentity-rs,quickentity-3,xdelta3,7zz,ResourceTool}
-          tar czf $out/$d.tar.gz $d
+          mkdir $out
+          tar czf $out/h3mod-${version}-linux-x64.tar.gz $d
+        '';
+
+        bundle-windows = pkgs.runCommand "h3mod-windows-x64-${version}" { nativeBuildInputs = [ pkgs.zip ]; } ''
+          d=h3mod-windows-x64
+          ${bundleCommon "$d"}
+          cp ${h3mod-windows}/bin/windows_amd64/h3mod.exe $d/
+          cp ${windows-tools}/* $d/tools/
+          chmod -R u+w $d
+          mkdir $out
+          zip -qr9 $out/h3mod-${version}-windows-x64.zip $d
         '';
       };
 
