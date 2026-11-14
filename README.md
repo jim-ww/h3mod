@@ -120,6 +120,7 @@ to `h3mod.log` next to the config.
     undeploy
     sdk [install | uninstall | enable | disable | mod <name> [on|off]]
                                    ZHMModSDK: status, install/update, loader switch, its mods
+    self-update [--yes]            update h3mod itself (release installs)
     help [command], version, completion <shell>
 
 `--config`/`-c` picks the config; `h3mod <command> --help` explains a command.
@@ -141,6 +142,16 @@ Before each deploy the load order is sorted by the mods' `loadBefore` and
 `loadAfter` rules, keeping the current order where the rules allow. Option
 selections are saved with the mod version: when a mod updates, removed options
 are dropped, new ones get their defaults, and each change is reported.
+
+## Updating h3mod
+
+A release install updates itself: `h3mod self-update`, or the GUI's update
+check (also on start with **Check on start**), which shows what's new and
+asks first. The download is checked against the release's checksums and
+unpacked completely before anything changes; files are then swapped in by
+renames, and an interrupted update completes on the next start. Only what the
+release contains is replaced, never configs or mods next to it. Nix installs
+update with nix.
 
 ## ZHMModSDK
 

@@ -1,2 +1,1 @@
 - instead of shipping tools together with binary, embed in binary itself? and separate gui , cli releases
-- self update (windows, non-nix linux): checkUpdates and manual checks also check h3mod itself, ask before updating, replace safely
