@@ -16,10 +16,12 @@ import (
 // State records what the last deploy wrote, in state.json next to the
 // config. It lets a deploy skip archives whose inputs didn't change.
 type State struct {
-	Deployed time.Time         `json:"deployed,omitzero"`
-	Mods     []string          `json:"mods,omitempty"`
-	Archives map[string]Output `json:"archives,omitempty"` // by file name in Runtime
-	Retail   map[string]string `json:"retail,omitempty"`   // files placed in Retail/mods -> sha256
+	Deployed  time.Time              `json:"deployed,omitzero"`
+	Mods      []string               `json:"mods,omitempty"`    // load order of the deploy
+	ModInfo   map[string]deployedMod `json:"modInfo,omitempty"` // by mod folder
+	SkipIntro bool                   `json:"skipIntro,omitempty"`
+	Archives  map[string]Output      `json:"archives,omitempty"` // by file name in Runtime
+	Retail    map[string]string      `json:"retail,omitempty"`   // files placed in Retail/mods -> sha256
 }
 
 type Output struct {

@@ -72,7 +72,7 @@ func main() {
 	}
 
 	a := app.NewWithID("io.github.jim-ww.h3mod")
-	g := &gui{app: a, win: a.NewWindow("h3mod " + version), ctx: context.Background()}
+	g := &gui{app: a, win: a.NewWindow("h3mod " + version), ctx: context.Background(), state: &State{}}
 	g.win.Resize(fyne.NewSize(1000, 680))
 	cfg, err := loadConfig(*cfgPath)
 	if err != nil {
@@ -120,12 +120,13 @@ func guiConfigPath() string {
 }
 
 type gui struct {
-	app  fyne.App
-	win  fyne.Window
-	ctx  context.Context
-	cfg  *Config
-	mods []*Mod // in status order: enabled in load order, then disabled
-	sel  *Mod
+	app   fyne.App
+	win   fyne.Window
+	ctx   context.Context
+	cfg   *Config
+	mods  []*Mod // in status order: enabled in load order, then disabled
+	sel   *Mod
+	state *State // the last deploy: what's in the game
 
 	list      *widget.List
 	details   *fyne.Container
@@ -134,6 +135,7 @@ type gui struct {
 	logText   *widget.Label
 	logScroll *container.Scroll
 	status    *widget.Label // current step, or a drag hint
+	summary   *widget.Label // what's deployed and what isn't yet
 	working   *widget.ProgressBarInfinite
 	progress  *widget.ProgressBar
 	actions   []fyne.Disableable
@@ -168,6 +170,7 @@ func (g *gui) build() {
 	skipIntro.OnChanged = func(on bool) {
 		g.cfg.SkipIntro = &on
 		g.saveConfig()
+		g.refreshState()
 	}
 	g.actions = []fyne.Disableable{install, updates, deploy, undeploy}
 
@@ -183,12 +186,14 @@ func (g *gui) build() {
 	g.logScroll = container.NewVScroll(g.logText)
 	g.logScroll.SetMinSize(fyne.NewSize(0, 140))
 	g.status = widget.NewLabel("")
+	g.summary = widget.NewLabel("")
+	g.summary.Wrapping = fyne.TextWrapWord
 	g.working = widget.NewProgressBarInfinite()
 	g.working.Hide()
 	g.progress = widget.NewProgressBar()
 	g.progress.Hide()
 	bars := container.NewStack(g.working, g.progress)
-	bottom := container.NewVBox(container.NewHBox(deploy, undeploy, g.status), bars, g.logScroll)
+	bottom := container.NewVBox(g.summary, container.NewHBox(deploy, undeploy, g.status), bars, g.logScroll)
 
 	split := container.NewHSplit(g.list, container.NewVScroll(container.NewPadded(g.details)))
 	split.Offset = 0.45
@@ -209,24 +214,38 @@ type modRow struct {
 	id     int
 	check  *widget.Check
 	name   *widget.Label
+	state  *widget.Label // deployed, not deployed yet, …
 	dragDY float32
 }
 
 func newModRow(g *gui) *modRow {
-	r := &modRow{g: g, check: widget.NewCheck("", nil), name: widget.NewLabel("")}
+	r := &modRow{g: g, check: widget.NewCheck("", nil), name: widget.NewLabel(""), state: widget.NewLabel("")}
 	r.name.Truncation = fyne.TextTruncateEllipsis
 	r.ExtendBaseWidget(r)
 	return r
 }
 
 func (r *modRow) CreateRenderer() fyne.WidgetRenderer {
-	return widget.NewSimpleRenderer(container.NewBorder(nil, nil, r.check, nil, r.name))
+	return widget.NewSimpleRenderer(container.NewBorder(nil, nil, r.check, r.state, r.name))
 }
 
 func (r *modRow) set(id int) {
 	r.id = id
 	m := r.g.mods[id]
 	r.name.SetText(modLine(m))
+	st := modDeployStatus(r.g.cfg, r.g.state, m)
+	r.state.SetText(strings.TrimSuffix(st, ", not deployed yet"))
+	switch st {
+	case "deployed":
+		r.state.Importance = widget.SuccessImportance
+	case "":
+	default:
+		r.state.Importance = widget.WarningImportance
+		if st != "not deployed yet" && st != "deployed, removed on next deploy" {
+			r.state.SetText(r.state.Text + ", not deployed")
+		}
+	}
+	r.state.Refresh()
 	r.check.OnChanged = nil
 	r.check.SetChecked(r.g.cfg.isEnabled(m.Dir))
 	r.check.OnChanged = func(on bool) { r.g.setEnabled(m, on) }
@@ -436,11 +455,26 @@ func (g *gui) reload() {
 		g.logf("%s", n)
 	}
 	g.mods = listed(g.cfg, mods)
+	if g.state, err = loadState(g.cfg.abs("state.json")); err != nil {
+		g.showError(err)
+		g.state = &State{}
+	}
+	g.refreshState()
 	if g.sel != nil {
 		g.sel = findMod(g.mods, g.sel.Dir)
 	}
 	g.list.Refresh()
 	g.showDetails()
+}
+
+// refreshState updates what the list and summary say about deployment.
+func (g *gui) refreshState() {
+	line, pending := deployStatus(g.cfg, g.state, g.mods)
+	if pending {
+		line += ". Press Deploy to apply."
+	}
+	g.summary.SetText(strings.ToUpper(line[:1]) + line[1:])
+	g.list.Refresh()
 }
 
 func (g *gui) setEnabled(m *Mod, on bool) {
@@ -525,6 +559,7 @@ func (g *gui) showDetails() {
 			return
 		}
 		g.saveConfig()
+		g.refreshState()
 	}
 	groups := map[string]bool{}
 	for _, o := range m.Manifest.Options {
@@ -737,7 +772,7 @@ func (g *gui) deploy(skipUnsupported bool) {
 		case err != nil:
 			g.showError(err)
 		default:
-			g.reload() // deploy may sort the load order
+			g.reload() // deploy may sort the load order, and changes what's deployed
 		}
 	})
 }
@@ -746,7 +781,12 @@ func (g *gui) undeploy() {
 	dialog.ShowConfirm("Restore vanilla", "Remove all deployed mods from the game? Your mods folder isn't touched.", func(ok bool) {
 		if ok {
 			logLine("undeploy")
-			g.busy(false, g.deployer().Undeploy, nil)
+			g.busy(false, g.deployer().Undeploy, func(err error) {
+				if err != nil {
+					g.showError(err)
+				}
+				g.reload()
+			})
 		}
 	}, g.win)
 }

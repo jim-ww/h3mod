@@ -97,12 +97,32 @@ func status(cfg *Config) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("enabled, in load order (later wins):")
-	for i, m := range listed(cfg, mods) {
+	st, err := loadState(cfg.abs("state.json"))
+	if err != nil {
+		return err
+	}
+	line, pending := deployStatus(cfg, st, mods)
+	if pending {
+		line += " (h3mod deploy applies them)"
+	}
+	fmt.Println(line)
+	fmt.Println()
+	fmt.Println("enabled for the next deploy, in load order (later wins):")
+	list := listed(cfg, mods)
+	width := 0
+	for _, m := range list {
+		width = max(width, len(fmt.Sprintf("%s (%s)", m.Title(), m.Dir)))
+	}
+	for i, m := range list {
 		if i == len(cfg.Enabled) {
 			fmt.Println("disabled:")
 		}
-		fmt.Printf("  %2d. %s (%s)\n", i+1, m.Title(), m.Dir)
+		name := fmt.Sprintf("%s (%s)", m.Title(), m.Dir)
+		if s := modDeployStatus(cfg, st, m); s != "" {
+			fmt.Printf("  %2d. %-*s  %s\n", i+1, width, name, s)
+		} else {
+			fmt.Printf("  %2d. %s\n", i+1, name)
+		}
 		if sel, _ := cfg.selection(m); len(sel) > 0 && cfg.isEnabled(m.Dir) {
 			fmt.Printf("      options: %s\n", strings.Join(sel, ", "))
 		}

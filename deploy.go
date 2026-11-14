@@ -269,7 +269,12 @@ func (d *Deployer) Deploy(ctx context.Context, skipUnsupported bool, out string)
 		return err
 	}
 	if out == "" {
-		state.Deployed, state.Mods, state.Archives = time.Now(), slices.Clone(d.cfg.Enabled), next
+		mods, err := discoverMods(d.cfg.abs(d.cfg.Mods))
+		if err != nil {
+			return err
+		}
+		state.recordDeploy(d.cfg, mods, d.skipIntro)
+		state.Archives = next
 		if err := state.save(d.statePath()); err != nil {
 			return err
 		}
