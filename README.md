@@ -67,8 +67,13 @@ The easiest way to get them is `tools/` and `data/` from a release archive.
 
 Start `h3mod-gui` (`h3mod-gui.exe` on Windows). Install mods by dropping their
 archives on the window or with **Install mod…**, tick the ones you want,
-select a mod to pick its options, then press **Deploy**. **Restore vanilla**
-removes all mods from the game. Mods are kept in `mods/` next to the program.
+select a mod to pick its options, then press **Deploy**. Drag mods up or down
+to change the load order. **Restore vanilla** removes all mods from the game.
+Mods are kept in `mods/` next to the program.
+
+    h3mod-gui [-config h3mod.json] [-game dir] [-mods dir]
+
+`-game` and `-mods` set the folders and save them to the config.
 
 ### Terminal
 
@@ -78,11 +83,18 @@ From the folder the release was unpacked to (inside the HITMAN 3 folder):
     ./h3mod                                   # status: mods, options, problems
     ./h3mod options "Some Mod"                # list its options
     ./h3mod option "Some Mod" "Color:Red"     # pick one
+    ./h3mod move "Some Mod" 1                 # load it first (later wins)
     ./h3mod deploy                            # apply to the game
     ./h3mod undeploy                          # back to vanilla
 
-On Windows run `.\h3mod.exe` the same way. Coming from SMF: set `"mods":
-"../SMF/Mods"` in `h3mod.json` and run `h3mod import-smf`.
+On Windows run `.\h3mod.exe` the same way.
+
+On the first run, both ask whether to use SMF's mods folder (with its load
+order and options) when the game folder has one. Later, set `"mods"` in
+`h3mod.json` and run `h3mod import-smf`, or use **Mods: Change…** in the GUI.
+
+Errors name the mod and the file in it. Runs that change something are logged
+to `h3mod.log` next to the config.
 
 ## Commands
 
@@ -163,7 +175,8 @@ replaces or removes summaries it wrote itself.
 ## Files
 
 `cache/` holds built entities, textures, deltas and RTLVs; `state.json` the
-deployed archives, so unchanged ones aren't rewritten. Both can be deleted at
+deployed archives, so unchanged ones aren't rewritten; `h3mod.log` the last
+runs (moved to `h3mod.log.1` at 1 MB). Both can be deleted at
 any time. `clean/` keeps the vanilla packagedefinition and thumbs.dat and
 must be kept.
 
