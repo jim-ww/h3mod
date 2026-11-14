@@ -1,4 +1,4 @@
-module h3mod
+module github.com/jim-ww/h3mod
 
 go 1.26.0
 
