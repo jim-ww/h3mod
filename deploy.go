@@ -307,8 +307,8 @@ func (d *Deployer) buildEntities(ctx context.Context, p *Plan) error {
 		tools:    tools,
 		idx:      idx,
 		pathList: pathList,
-		cacheDir: d.cfg.abs(filepath.Join("cache", "entities")),
-		workDir:  d.cfg.abs(filepath.Join("cache", "work")),
+		cacheDir: filepath.Join(d.cfg.cacheDir(), "entities"),
+		workDir:  filepath.Join(d.cfg.cacheDir(), "work"),
 	}
 	start := time.Now()
 	if err := d.upgradeLegacy(ctx, p.Entities, tools, idx, pathList); err != nil {
@@ -331,8 +331,8 @@ func (d *Deployer) buildEntities(ctx context.Context, p *Plan) error {
 func (d *Deployer) upgradeLegacy(ctx context.Context, jobs []*entityJob, tools Tools, idx *Index, pathList string) error {
 	u := &legacyUpgrader{
 		tools:    tools,
-		cacheDir: d.cfg.abs(filepath.Join("cache", "legacy")),
-		workDir:  d.cfg.abs(filepath.Join("cache", "work")),
+		cacheDir: filepath.Join(d.cfg.cacheDir(), "legacy"),
+		workDir:  filepath.Join(d.cfg.cacheDir(), "work"),
 	}
 	var needJS, needQN3 bool
 	for _, j := range jobs {
@@ -418,7 +418,7 @@ func (d *Deployer) buildTextures(p *Plan) error {
 		return err
 	}
 	start := time.Now()
-	cache := d.cfg.abs(filepath.Join("cache", "textures"))
+	cache := filepath.Join(d.cfg.cacheDir(), "textures")
 	vanilla := func(h uint64) *Resource { return idx.res[h] }
 	for i, j := range p.Textures {
 		d.step("Building textures", i, len(p.Textures))
@@ -483,7 +483,7 @@ func (d *Deployer) buildDeltas(ctx context.Context, p *Plan) error {
 		return err
 	}
 	for _, j := range p.Deltas {
-		if err := j.build(ctx, idx, d.cfg.abs(filepath.Join("cache", "deltas")), d.cfg.abs(filepath.Join("cache", "work"))); err != nil {
+		if err := j.build(ctx, idx, filepath.Join(d.cfg.cacheDir(), "deltas"), filepath.Join(d.cfg.cacheDir(), "work")); err != nil {
 			return fmt.Errorf("%s: %w", d.modFile(j.path), err)
 		}
 	}
@@ -520,7 +520,7 @@ func (d *Deployer) buildRTLVs(ctx context.Context, p *Plan) error {
 		return err
 	}
 	for _, j := range p.RTLVs {
-		if err := j.build(ctx, tools, d.cfg.abs(filepath.Join("cache", "rtlv")), d.cfg.abs(filepath.Join("cache", "work"))); err != nil {
+		if err := j.build(ctx, tools, filepath.Join(d.cfg.cacheDir(), "rtlv"), filepath.Join(d.cfg.cacheDir(), "work")); err != nil {
 			return fmt.Errorf("%s: %w", d.modFile(j.path), err)
 		}
 	}

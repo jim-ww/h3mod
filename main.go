@@ -47,6 +47,11 @@ func terminalProgress(d *Deployer) {
 // firstRun offers SMF's mods folder when there is no config yet, asking on
 // a terminal, and creates the mods folder otherwise.
 func firstRun(cfg *Config) error {
+	if !isGame(cfg.abs(cfg.Game)) {
+		if err := locateGame(cfg); err != nil {
+			return err
+		}
+	}
 	if !cfg.fresh {
 		return nil
 	}
@@ -71,6 +76,26 @@ func firstRun(cfg *Config) error {
 	if err := os.MkdirAll(cfg.abs(cfg.Mods), 0o755); err != nil {
 		return err
 	}
+	return cfg.save()
+}
+
+// locateGame finds the game for a config whose game folder isn't one,
+// asking on a terminal when it isn't in a usual place.
+func locateGame(cfg *Config) error {
+	dir := findGame()
+	if dir == "" {
+		if st, err := os.Stdin.Stat(); err != nil || st.Mode()&os.ModeCharDevice == 0 {
+			return fmt.Errorf("HITMAN 3 not found at %s; set \"game\" in %s", cfg.abs(cfg.Game), cfg.path)
+		}
+		fmt.Print("Where is HITMAN 3 (the folder with Retail and Runtime)? ")
+		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		dir = strings.TrimSpace(line)
+		if !isGame(dir) {
+			return fmt.Errorf("%s is not a HITMAN 3 folder: it has no Runtime/chunk0.rpkg", dir)
+		}
+	}
+	cfg.Game, _ = filepath.Abs(dir)
+	fmt.Println("game:", cfg.Game)
 	return cfg.save()
 }
 

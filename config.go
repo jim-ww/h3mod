@@ -51,11 +51,25 @@ func loadConfig(path string) (*Config, error) {
 	return c, nil
 }
 
+// cacheDir is where built files are cached: next to the config, or in the
+// user cache folder for a config in the user config folder.
+func (c *Config) cacheDir() string {
+	if c.path == xdgConfigPath() {
+		if dir, err := os.UserCacheDir(); err == nil {
+			return filepath.Join(dir, "h3mod")
+		}
+	}
+	return c.abs("cache")
+}
+
 func (c *Config) skipIntro() bool { return c.SkipIntro == nil || *c.SkipIntro }
 
 func (c *Config) save() error {
 	b, err := json.MarshalIndent(c, "", "\t")
 	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(c.path), 0o755); err != nil {
 		return err
 	}
 	return writeFileAtomic(c.path, append(b, '\n'))

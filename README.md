@@ -70,7 +70,7 @@ archives on the window or with **Install mod…**, tick the ones you want,
 select a mod to pick its options, then press **Deploy**. Drag mods up or down
 to change the load order. Each mod shows whether it's deployed, and the line
 above **Deploy** says what the next deploy would change. **Restore vanilla** removes all mods from the game.
-Mods are kept in `mods/` next to the program.
+Mods are kept in the `mods/` folder next to the config (see Config).
 
     h3mod-gui [--config h3mod.json] [--game dir] [--mods dir]
 
@@ -154,9 +154,13 @@ the same scripts under its own name.
 
 ## Config
 
-`h3mod.json` in the current directory (`--config` to change); the GUI uses the
-one next to it, so both share it when run from the release folder. Without
-one, these defaults apply; relative paths are relative to the config.
+`h3mod` and `h3mod-gui` use the first config that exists of `./h3mod.json`,
+`h3mod.json` next to the program and, on Linux, `~/.config/h3mod/config.json`
+(`--config` picks another). Without one, a new config is made in
+`~/.config/h3mod/` on Linux and next to the program on Windows; the game is
+found next to the program or in the usual Steam folders, or asked for.
+Relative paths are relative to the config; a config in `~/.config` keeps its
+caches in `~/.cache/h3mod`.
 
     {
       "game": "..",               // HITMAN 3 folder

@@ -63,3 +63,89 @@ func dataFile(cfg *Config, env, name string) (string, error) {
 	}
 	return "", fmt.Errorf("%s not found (%s unset; looked in %s); %s", name, env, strings.Join(tried, ", "), bundleHint)
 }
+
+// isGame reports whether dir is a HITMAN 3 installation.
+func isGame(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, "Runtime", "chunk0.rpkg"))
+	return err == nil
+}
+
+// findGame looks for HITMAN 3 where it usually is: around the program (a
+// release unpacked into the game folder) and in the usual Steam libraries.
+func findGame() string {
+	dirs := []string{filepath.Dir(exeDir()), exeDir()}
+	if wd, err := os.Getwd(); err == nil {
+		dirs = append(dirs, filepath.Dir(wd), wd)
+	}
+	for _, d := range append(dirs, steamGameDirs()...) {
+		if isGame(d) {
+			return d
+		}
+	}
+	return ""
+}
+
+func steamGameDirs() []string {
+	var roots []string
+	if runtime.GOOS == "windows" {
+		roots = []string{`C:\Program Files (x86)\Steam`, `C:\Program Files\Steam`, `D:\SteamLibrary`, `E:\SteamLibrary`}
+	} else if home, err := os.UserHomeDir(); err == nil {
+		roots = []string{filepath.Join(home, ".steam", "steam"), filepath.Join(home, ".local", "share", "Steam")}
+	}
+	var out []string
+	for _, r := range roots {
+		out = append(out, filepath.Join(r, "steamapps", "common", "HITMAN 3"))
+	}
+	return out
+}
+
+// configPath is the config to use without --config: the first of
+// ./h3mod.json, h3mod.json next to the program and, on Linux,
+// ~/.config/h3mod/config.json that exists. Without any, a new one goes to
+// ~/.config/h3mod on Linux and next to the program on Windows (or to
+// %APPDATA%\h3mod when the program's folder isn't writable).
+func configPath() string {
+	candidates := []string{"h3mod.json", filepath.Join(exeDir(), "h3mod.json")}
+	xdg := xdgConfigPath()
+	if xdg != "" {
+		candidates = append(candidates, xdg)
+	}
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			abs, _ := filepath.Abs(p)
+			return abs
+		}
+	}
+	if xdg != "" {
+		return xdg
+	}
+	if dirWritable(exeDir()) {
+		return filepath.Join(exeDir(), "h3mod.json")
+	}
+	if dir, err := os.UserConfigDir(); err == nil {
+		return filepath.Join(dir, "h3mod", "h3mod.json")
+	}
+	return "h3mod.json"
+}
+
+// xdgConfigPath is ~/.config/h3mod/config.json on Linux, "" elsewhere.
+func xdgConfigPath() string {
+	if runtime.GOOS == "windows" {
+		return ""
+	}
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, "h3mod", "config.json")
+}
+
+func dirWritable(dir string) bool {
+	f, err := os.CreateTemp(dir, ".h3mod-write-test-")
+	if err != nil {
+		return false
+	}
+	f.Close()
+	os.Remove(f.Name())
+	return true
+}

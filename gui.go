@@ -43,7 +43,6 @@ const guiUsage = `usage: h3mod-gui [--config h3mod.json] [--game dir] [--mods di
 func main() {
 	if hasCommand(os.Args[1:]) {
 		attachConsole()
-		defaultConfig = guiConfigPath() // the same mods as the window
 		cliMain("h3mod-gui")
 		return
 	}
@@ -51,7 +50,7 @@ func main() {
 	var out bytes.Buffer
 	fl.SetOutput(&out)
 	fl.Usage = func() { out.WriteString(guiUsage) }
-	cfgPath := fl.String("config", guiConfigPath(), "")
+	cfgPath := fl.String("config", configPath(), "")
 	game := fl.String("game", "", "")
 	mods := fl.String("mods", "", "")
 	flagErr := fl.Parse(os.Args[1:])
@@ -110,22 +109,6 @@ func main() {
 		})
 	})
 	a.Run()
-}
-
-// guiConfigPath is h3mod.json next to the program, or in the user config
-// folder when the program's folder isn't writable (e.g. installed by nix).
-func guiConfigPath() string {
-	dir := exeDir()
-	if f, err := os.CreateTemp(dir, ".h3mod-write-test-"); err == nil {
-		f.Close()
-		os.Remove(f.Name())
-		return filepath.Join(dir, "h3mod.json")
-	}
-	if cd, err := os.UserConfigDir(); err == nil {
-		dir = filepath.Join(cd, "h3mod")
-		os.MkdirAll(dir, 0o755)
-	}
-	return filepath.Join(dir, "h3mod.json")
 }
 
 type gui struct {
@@ -386,12 +369,6 @@ func (g *gui) saveConfig() {
 	}
 }
 
-// isGame reports whether dir is a HITMAN 3 installation.
-func isGame(dir string) bool {
-	_, err := os.Stat(filepath.Join(dir, "Runtime", "chunk0.rpkg"))
-	return err == nil
-}
-
 // ensureGame finds the game folder, asking for it when it isn't where the
 // config says or in a usual Steam location, then runs next.
 func (g *gui) ensureGame(next func()) {
@@ -399,16 +376,14 @@ func (g *gui) ensureGame(next func()) {
 		next()
 		return
 	}
-	for _, dir := range steamGameDirs() {
-		if isGame(dir) {
-			g.cfg.Game = dir
-			if !g.cfg.fresh {
-				g.saveConfig()
-			}
-			g.updateFolders()
-			next()
-			return
+	if dir := findGame(); dir != "" {
+		g.cfg.Game = dir
+		if !g.cfg.fresh {
+			g.saveConfig()
 		}
+		g.updateFolders()
+		next()
+		return
 	}
 	dialog.ShowInformation("Where is HITMAN 3?", "Choose the HITMAN 3 game folder (the one with Retail and Runtime in it).", g.win)
 	g.pickGameThen(next)
@@ -444,20 +419,6 @@ func (g *gui) firstRun(next func()) {
 			}
 			next()
 		}, g.win)
-}
-
-func steamGameDirs() []string {
-	var roots []string
-	if runtime.GOOS == "windows" {
-		roots = []string{`C:\Program Files (x86)\Steam`, `C:\Program Files\Steam`, `D:\SteamLibrary`, `E:\SteamLibrary`}
-	} else if home, err := os.UserHomeDir(); err == nil {
-		roots = []string{filepath.Join(home, ".steam", "steam"), filepath.Join(home, ".local", "share", "Steam")}
-	}
-	var out []string
-	for _, r := range roots {
-		out = append(out, filepath.Join(r, "steamapps", "common", "HITMAN 3"))
-	}
-	return out
 }
 
 func (g *gui) pickGame() { g.pickGameThen(g.reload) }

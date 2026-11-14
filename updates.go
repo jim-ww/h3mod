@@ -160,7 +160,7 @@ func findUpdates(ctx context.Context, mods []*Mod, logf func(string, ...any)) []
 
 // installUpdate downloads an update and installs it into the mod's folder.
 func installUpdate(ctx context.Context, cfg *Config, m *Mod, u modUpdate) error {
-	work := cfg.abs(filepath.Join("cache", "work"))
+	work := filepath.Join(cfg.cacheDir(), "work")
 	if err := os.MkdirAll(work, 0o755); err != nil {
 		return err
 	}

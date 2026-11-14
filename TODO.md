@@ -1,5 +1,4 @@
 - add simple install/uninstall (or enable/disable toggle) for ZHM mod manager
-- bug: doesnt find h3mod.json in running dir AND on linux, if h3mod.json not found in current dir, should look at .config/h3mod/config.json location. (on windows should still create config in same dir)
 - instead of shipping tools together with binary, embed in binary itself? and separate gui , cli releases
 - remove 7z dependency? e.g. use go stdlib
 - add way to import options AND deploy state (once again) from SMF. store/ability to specify path to SMF dir somewhere?

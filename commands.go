@@ -16,9 +16,8 @@ import (
 // version is set at build time from VERSION.
 var version = "dev"
 
-// defaultConfig is the config used without --config: h3mod.json in the
-// current directory, or for h3mod-gui the one next to the program.
-var defaultConfig = "h3mod.json"
+// defaultConfig is the config used without --config, see configPath.
+var defaultConfig = configPath()
 
 // cliMain runs a command line; h3mod-gui uses it too when given a command.
 func cliMain(name string) {
