@@ -171,6 +171,39 @@
         postInstall = "mv $out/bin/h3mod $out/bin/h3mod-gui";
       };
 
+      # Portable GUI builds, cross-compiled with zig: a Windows exe without a
+      # console window, and a Linux binary against glibc 2.31, which loads
+      # X11/Wayland and OpenGL from the system at runtime.
+      zigGui = target: extra: h3mod-gui-bin.overrideAttrs (old: {
+        nativeBuildInputs = old.nativeBuildInputs ++ [ pkgs.zig ];
+        env = (old.env or { }) // extra // { CGO_ENABLED = "1"; };
+        # after stdenv has set its own compiler
+        preBuild = (old.preBuild or "") + ''
+          export ZIG_GLOBAL_CACHE_DIR=$TMPDIR/zig-cache ZIG_LOCAL_CACHE_DIR=$TMPDIR/zig-local
+          export CC="zig cc -target ${target}" CXX="zig c++ -target ${target}"
+        '';
+      });
+      h3mod-gui-windows = (zigGui "x86_64-windows-gnu" { GOOS = "windows"; GOARCH = "amd64"; }).overrideAttrs (old: {
+        # zig ignores -mwindows, which -H windowsgui asks the external linker for
+        ldflags = old.ldflags ++ [ "-H=windowsgui" "-extldflags=-Wl,--subsystem,windows" ];
+        buildInputs = [ ];
+        postInstall = "mv $out/bin/windows_amd64/h3mod.exe $out/bin/h3mod-gui.exe; rmdir $out/bin/windows_amd64";
+      });
+
+      h3mod-gui-linux = (zigGui "x86_64-linux-gnu.2.31" { }).overrideAttrs (old: {
+        # Headers and link stubs come from nix; at runtime the system's libraries
+        # are used, so their own (newer) glibc needs aren't checked here.
+        preBuild = old.preBuild + ''
+          pc="x11 xext xrender xfixes xcursor xrandr xinerama xi xxf86vm wayland-client wayland-cursor wayland-egl xkbcommon gl"
+          export CGO_CFLAGS="$(pkg-config --cflags $pc)"
+          export CGO_LDFLAGS="$(pkg-config --libs-only-L $pc) -Wl,--allow-shlib-undefined"
+        '';
+        buildInputs = old.buildInputs ++ [ pkgs.libglvnd.dev pkgs.libxrender pkgs.libxfixes ];
+        # the C parts keep a path to the Go toolchain; harmless off nix
+        disallowedReferences = [ ];
+        postInstall = "mv $out/bin/h3mod $out/bin/h3mod-gui";
+      });
+
       h3mod-windows = h3mod-bin.overrideAttrs (old: {
         env = old.env // { GOOS = "windows"; GOARCH = "amd64"; };
       });
@@ -206,6 +239,7 @@
     {
       packages.${system} = {
         inherit quickentity quickentity-static quickentity3 quickentity3-static legacy-quickentity resourcetool;
+        inherit h3mod-gui-windows h3mod-gui-linux;
         default = pkgs.runCommand "h3mod-${version}" { nativeBuildInputs = [ pkgs.makeWrapper ]; } ''
           makeWrapper ${h3mod-bin}/bin/h3mod $out/bin/h3mod \
             --prefix PATH : ${pkgs.lib.makeBinPath [ quickentity quickentity3 resourcetool pkgs.xdelta pkgs._7zz ]} \
@@ -229,13 +263,13 @@
         bundle = pkgs.runCommand "h3mod-linux-x64-${version}" { } ''
           d=h3mod-linux-x64
           ${bundleCommon "$d"}
-          cp ${h3mod-bin}/bin/h3mod $d/
+          cp ${h3mod-bin}/bin/h3mod ${h3mod-gui-linux}/bin/h3mod-gui $d/
           cp ${quickentity-static}/bin/quickentity-rs ${quickentity3-static}/bin/quickentity-3 ${pkgs.pkgsStatic.xdelta}/bin/xdelta3 \
             ${sevenzip-static}/bin/7zz ${resourcetool-bin}/ResourceTool ${resourcetool-bin}/*.so $d/tools/
           cp ${resourcetool-bin}/LICENSE $d/tools/ResourceTool-LICENSE
           cp ${sevenzip-static}/7-Zip-License.txt $d/tools/
           chmod -R u+w $d
-          chmod +x $d/h3mod $d/tools/{quickentity-rs,quickentity-3,xdelta3,7zz,ResourceTool}
+          chmod +x $d/h3mod $d/h3mod-gui $d/tools/{quickentity-rs,quickentity-3,xdelta3,7zz,ResourceTool}
           mkdir $out
           tar czf $out/h3mod-${version}-linux-x64.tar.gz $d
         '';
@@ -243,7 +277,7 @@
         bundle-windows = pkgs.runCommand "h3mod-windows-x64-${version}" { nativeBuildInputs = [ pkgs.zip ]; } ''
           d=h3mod-windows-x64
           ${bundleCommon "$d"}
-          cp ${h3mod-windows}/bin/windows_amd64/h3mod.exe $d/
+          cp ${h3mod-windows}/bin/windows_amd64/h3mod.exe ${h3mod-gui-windows}/bin/h3mod-gui.exe $d/
           cp ${windows-tools}/* $d/tools/
           chmod -R u+w $d
           mkdir $out

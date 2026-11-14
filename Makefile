@@ -2,17 +2,21 @@ VERSION := $(shell cat VERSION)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 DIST    := dist
 
-.PHONY: build test bundles release publish clean
+.PHONY: build gui test bundles release publish clean
 
 # h3mod for this system; it finds its tools in PATH (see README)
 build:
 	CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o h3mod .
 
+# h3mod-gui with all tools, via nix (Fyne needs cgo, OpenGL and X11/Wayland)
+gui:
+	nix build .#gui -o result-gui
+
 # tests need the tools and hash lists from the dev shell
 test:
 	nix develop -c go test -count=1 ./...
 
-# Linux and Windows archives with all tools, in result-bundle*/
+# Linux and Windows archives with the CLI, the GUI and all tools, in result-bundle*/
 bundles:
 	nix build .#bundle -o result-bundle
 	nix build .#bundle-windows -o result-bundle-windows
@@ -29,4 +33,4 @@ publish: release
 	gh release create v$(VERSION) --title 'h3mod $(VERSION)' --generate-notes $(DIST)/*
 
 clean:
-	rm -rf $(DIST) h3mod h3mod.exe result result-bundle result-bundle-windows
+	rm -rf $(DIST) h3mod h3mod.exe result result-gui result-bundle result-bundle-windows
