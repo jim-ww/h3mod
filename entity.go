@@ -94,6 +94,7 @@ func findTools() (Tools, error) {
 
 func (t Tools) run(ctx context.Context, dir string, name string, args ...string) error {
 	cmd := exec.CommandContext(ctx, name, args...)
+	hideWindow(cmd)
 	cmd.Dir = dir
 	var out bytes.Buffer
 	cmd.Stdout = &out

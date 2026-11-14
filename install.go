@@ -113,6 +113,7 @@ func extractArchive(ctx context.Context, src, dst string) error {
 	}
 	var out bytes.Buffer
 	cmd := exec.CommandContext(ctx, sz, "x", "-y", "-bd", "-o"+dst, abs)
+	hideWindow(cmd)
 	cmd.Stdout, cmd.Stderr = &out, &out
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("extracting %s: %w: %s", src, err, strings.TrimSpace(out.String()))

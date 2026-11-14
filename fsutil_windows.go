@@ -3,6 +3,8 @@ package main
 import (
 	"errors"
 	"os"
+	"os/exec"
+	"syscall"
 
 	"golang.org/x/sys/windows"
 )
@@ -20,3 +22,9 @@ func lockFile(f *os.File) error {
 // syncDir is a no-op: NTFS journals renames, and directories can't be
 // flushed like files.
 func syncDir(string) error { return nil }
+
+// hideWindow keeps console tools from opening a window each time the GUI,
+// which has no console, runs them.
+func hideWindow(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}
+}

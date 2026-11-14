@@ -71,6 +71,7 @@ func (j *deltaJob) build(ctx context.Context, idx *Index, cacheDir, workDir stri
 	}
 	var stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, xdelta, "-d", "-s", src, j.path, dst)
+	hideWindow(cmd)
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("xdelta3: %w: %s", err, strings.TrimSpace(stderr.String()))

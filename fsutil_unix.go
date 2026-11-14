@@ -5,6 +5,7 @@ package main
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"syscall"
 )
 
@@ -27,3 +28,5 @@ func syncDir(dir string) error {
 	defer d.Close()
 	return d.Sync()
 }
+
+func hideWindow(*exec.Cmd) {}
