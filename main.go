@@ -12,11 +12,13 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 )
 
 const usage = `usage: h3mod [-config h3mod.json] [command] [args]
@@ -54,10 +56,41 @@ deleted ones drop out of the load order.
 // version is set at build time from VERSION.
 var version = "dev"
 
+// defaultConfig is the config used without -config: h3mod.json in the
+// current directory, or for h3mod-gui the one next to the program.
+var defaultConfig = "h3mod.json"
+
+// cliMain runs a command line; h3mod-gui uses it too when given a command.
+func cliMain() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := run(ctx, os.Args[1:]); err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		logLine("error: %v", err)
+		os.Exit(1)
+	}
+	logLine("done")
+}
+
+// hasCommand reports whether args name a command rather than only flags,
+// which tells h3mod-gui to act like the CLI.
+func hasCommand(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		a := strings.TrimLeft(args[i], "-")
+		switch {
+		case !strings.HasPrefix(args[i], "-"):
+			return true
+		case a == "config" || a == "game" || a == "mods":
+			i++ // the flag's value
+		}
+	}
+	return false
+}
+
 func run(ctx context.Context, args []string) error {
 	fl := flag.NewFlagSet("h3mod", flag.ContinueOnError)
 	fl.Usage = func() { fmt.Fprint(os.Stderr, usage) }
-	cfgPath := fl.String("config", "h3mod.json", "config file")
+	cfgPath := fl.String("config", defaultConfig, "config file")
 	if err := fl.Parse(args); err != nil {
 		return err
 	}

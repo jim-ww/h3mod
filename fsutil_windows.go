@@ -28,3 +28,26 @@ func syncDir(string) error { return nil }
 func hideWindow(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}
 }
+
+// attachConsole connects a GUI-subsystem program, which starts without a
+// console, to the terminal it was started from, so h3mod-gui can run CLI
+// commands there.
+func attachConsole() {
+	const attachParentProcess = ^uint32(0)
+	attach := windows.NewLazySystemDLL("kernel32.dll").NewProc("AttachConsole")
+	if r, _, _ := attach.Call(uintptr(attachParentProcess)); r == 0 {
+		return // started without a terminal
+	}
+	for _, f := range []struct {
+		name string
+		std  **os.File
+	}{{"CONOUT$", &os.Stdout}, {"CONOUT$", &os.Stderr}, {"CONIN$", &os.Stdin}} {
+		h, err := windows.CreateFile(windows.StringToUTF16Ptr(f.name), windows.GENERIC_READ|windows.GENERIC_WRITE,
+			windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, nil, windows.OPEN_EXISTING, 0, 0)
+		if err == nil {
+			*f.std = os.NewFile(uintptr(h), f.name)
+		}
+	}
+	// The shell doesn't wait for GUI programs and has printed its prompt.
+	os.Stdout.WriteString("\n")
+}

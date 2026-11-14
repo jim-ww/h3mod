@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -92,6 +93,23 @@ func TestResolveMod(t *testing.T) {
 		}
 		if got != tt.want {
 			t.Errorf("%q: got %q (%v), want %q", tt.arg, got, err, tt.want)
+		}
+	}
+}
+
+func TestHasCommand(t *testing.T) {
+	for args, want := range map[string]bool{
+		"":                         false,
+		"-game /g -mods /m":        false,
+		"-config c.json":           false,
+		"-help":                    false,
+		"deploy":                   true,
+		"-config c.json status":    true,
+		"-game /g enable all":      true,
+		"--config=c.json undeploy": true,
+	} {
+		if got := hasCommand(strings.Fields(args)); got != want {
+			t.Errorf("%q: %v, want %v", args, got, want)
 		}
 	}
 }
