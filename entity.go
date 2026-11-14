@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -116,6 +117,7 @@ type entityRunner struct {
 
 	names func() (map[uint64]string, error) // paths for all jobs' references
 	label func(*entityJob) string           // how errors name a job
+	done  func(n int)                       // called after each job with the count so far
 }
 
 func (er *entityRunner) runAll(ctx context.Context, jobs []*entityJob) ([][2]*Resource, error) {
@@ -138,6 +140,10 @@ func (er *entityRunner) runAll(ctx context.Context, jobs []*entityJob) ([][2]*Re
 		return resolvePaths(er.pathList, want)
 	})
 	out := make([][2]*Resource, len(jobs))
+	var finished atomic.Int64
+	if er.done != nil {
+		er.done(0)
+	}
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(runtime.NumCPU())
 	for i, j := range jobs {
@@ -147,6 +153,9 @@ func (er *entityRunner) runAll(ctx context.Context, jobs []*entityJob) ([][2]*Re
 				return fmt.Errorf("%s: %w", er.label(j), err)
 			}
 			out[i] = [2]*Resource{temp, tblu}
+			if er.done != nil {
+				er.done(int(finished.Add(1)))
+			}
 			return nil
 		})
 	}

@@ -32,6 +32,15 @@ type Deployer struct {
 	game      *gameData
 	log       func(format string, args ...any)
 	skipIntro bool // from the config unless the deploy flag says otherwise
+	// progress, if set, hears about the slow steps: step done of total.
+	// It may be called from several goroutines at once.
+	progress func(step string, done, total int)
+}
+
+func (d *Deployer) step(step string, done, total int) {
+	if d.progress != nil {
+		d.progress(step, done, total)
+	}
 }
 
 func newDeployer(cfg *Config) *Deployer {
@@ -182,7 +191,9 @@ func (d *Deployer) Deploy(ctx context.Context, skipUnsupported bool, out string)
 	// Stage every changed archive fully before touching any game file.
 	next := map[string]Output{}
 	var staged []string
-	for _, c := range slices.Sorted(maps.Keys(p.Chunks)) {
+	chunks := slices.Sorted(maps.Keys(p.Chunks))
+	for i, c := range chunks {
+		d.step("Writing archives", i, len(chunks))
 		name := fmt.Sprintf("chunk%dpatch%d.rpkg", c, outputPatch)
 		res := slices.Collect(maps.Values(p.Chunks[c]))
 		fp, err := fingerprint(res)
@@ -281,6 +292,7 @@ func (d *Deployer) buildEntities(ctx context.Context, p *Plan) error {
 		return err
 	}
 	er := &entityRunner{
+		done: func(n int) { d.step("Building entities", n, len(p.Entities)) },
 		label: func(j *entityJob) string {
 			return fmt.Sprintf("%sentity %016X", d.modsOf(j.sources), j.temp)
 		},
@@ -400,7 +412,8 @@ func (d *Deployer) buildTextures(p *Plan) error {
 	start := time.Now()
 	cache := d.cfg.abs(filepath.Join("cache", "textures"))
 	vanilla := func(h uint64) *Resource { return idx.res[h] }
-	for _, j := range p.Textures {
+	for i, j := range p.Textures {
+		d.step("Building textures", i, len(p.Textures))
 		if err := j.build(cache, vanilla); err != nil {
 			return fmt.Errorf("%s: %w", d.modFile(j.path), err)
 		}

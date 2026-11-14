@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 const usage = `usage: h3mod [-config h3mod.json] [command] [args]
@@ -114,12 +115,39 @@ func run(ctx context.Context, args []string) error {
 		}
 		d := newDeployer(cfg)
 		d.skipIntro = *intro
+		terminalProgress(d)
 		return d.Deploy(ctx, *skip, *out)
 	case "undeploy":
 		return newDeployer(cfg).Undeploy()
 	}
 	fl.Usage()
 	return fmt.Errorf("unknown command %q", cmd)
+}
+
+// terminalProgress shows deploy progress on one updating line when stdout
+// is a terminal, with log lines printed above it.
+func terminalProgress(d *Deployer) {
+	if st, err := os.Stdout.Stat(); err != nil || st.Mode()&os.ModeCharDevice == 0 {
+		return
+	}
+	var mu sync.Mutex
+	shown := false
+	d.progress = func(step string, done, total int) {
+		mu.Lock()
+		defer mu.Unlock()
+		fmt.Printf("\r\033[K%s %d/%d", step, done, total)
+		shown = true
+	}
+	log := d.log
+	d.log = func(format string, args ...any) {
+		mu.Lock()
+		defer mu.Unlock()
+		if shown {
+			fmt.Print("\r\033[K")
+			shown = false
+		}
+		log(format, args...)
+	}
 }
 
 // syncMods updates the config from the mods directory and says what changed.
