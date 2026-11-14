@@ -105,16 +105,18 @@ to `h3mod.log` next to the config.
     status                         mods in load order, options, problems (also with no command)
     enable <mod>... | all / disable <mod>... | all
     move <mod> <position>
-    install [-name n] [-replace] <archive|rpkg>
+    install [--name n] [--replace] <archive|rpkg>
     updates                        check mods' update URLs, with release notes
     update <mod>...                download and install new versions
     options <mod>                  list options and what is selected
     option <mod> <option> [on|off] select ("Group:Name" for choices)
     reset-options <mod>
     import-smf [config.json]       take load order and options from SMF
-    deploy [-skip-unsupported] [-skip-intro=false] [-out dir]
+    deploy [--skip-unsupported] [--skip-intro=false] [-o dir]
     undeploy
-    help, version
+    help [command], version, completion <shell>
+
+`--config`/`-c` picks the config; `h3mod <command> --help` explains a command.
 
 `<mod>` is a number from `status`, a folder name, a mod ID, or any part of
 the name only one mod has. On a first run every mod is enabled.
@@ -130,9 +132,23 @@ Before each deploy the load order is sorted by the mods' `loadBefore` and
 selections are saved with the mod version: when a mod updates, removed options
 are dropped, new ones get their defaults, and each change is reported.
 
+## Completion
+
+Tab completes commands, mod names, option names, load order positions and
+files. The nix packages install it for bash, zsh and fish. From a release
+archive, load the script from `completions/`:
+
+    source completions/h3mod.bash                 # bash, e.g. in ~/.bashrc
+    cp completions/h3mod.zsh ~/.zfunc/_h3mod      # zsh, with ~/.zfunc in fpath
+    cp completions/h3mod.fish ~/.config/fish/completions/
+    . .\completions\h3mod.ps1                     # PowerShell, e.g. in $PROFILE
+
+Completion runs `h3mod`, so its folder needs to be in PATH. `h3mod-gui` has
+the same scripts under its own name.
+
 ## Config
 
-`h3mod.json` in the current directory (`-config` to change); the GUI uses the
+`h3mod.json` in the current directory (`--config` to change); the GUI uses the
 one next to it, so both share it when run from the release folder. Without
 one, these defaults apply; relative paths are relative to the config.
 
