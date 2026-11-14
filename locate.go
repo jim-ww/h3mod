@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -28,6 +29,9 @@ func exeDir() string {
 
 func toolPath(name string) (string, error) {
 	p := filepath.Join(exeDir(), "tools", name)
+	if runtime.GOOS == "windows" {
+		p += ".exe"
+	}
 	if _, err := os.Stat(p); err != nil {
 		if p, err = exec.LookPath(name); err != nil {
 			return "", fmt.Errorf("%s not found in %s or PATH; %s", name, filepath.Join(exeDir(), "tools"), bundleHint)

@@ -100,9 +100,12 @@ func stageMods(ctx context.Context, src, stage, rpkgName string) ([]stagedMod, e
 }
 
 func extractArchive(ctx context.Context, src, dst string) error {
+	// 7-Zip's own Linux build is 7zz; p7zip and Windows have 7z
 	sz, err := toolPath("7zz")
 	if err != nil {
-		return err
+		if sz, err = toolPath("7z"); err != nil {
+			return err
+		}
 	}
 	abs, err := filepath.Abs(src)
 	if err != nil {

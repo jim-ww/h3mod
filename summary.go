@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -48,8 +49,7 @@ func (s *serverState) MarshalJSON() ([]byte, error) {
 	if len(s.plugins) > 0 {
 		arr := &node{isArr: true}
 		for _, p := range s.plugins {
-			// Peacock maps Z:\ paths back on Linux; under Wine they work as is.
-			raw, _ := marshalScalar(`Z:` + strings.ReplaceAll(p, "/", `\`))
+			raw, _ := marshalScalar(peacockPath(p))
 			arr.arr = append(arr.arr, &node{raw: raw})
 		}
 		field("peacockPlugins", arr)
@@ -69,12 +69,28 @@ type deploySummary struct {
 	LastServerSideStates *serverState        `json:"lastServerSideStates"`
 }
 
-// summaryPath is where Peacock running on Linux looks first.
+// peacockPath is a file path as Peacock should see it. On Linux that is a
+// Z:\ path, which Peacock maps back natively and which works under Wine.
+func peacockPath(p string) string {
+	if runtime.GOOS == "windows" {
+		return p
+	}
+	return `Z:` + strings.ReplaceAll(p, "/", `\`)
+}
+
+// summaryPath is where Peacock looks first: in LOCALAPPDATA on Windows, in
+// the XDG data folder on Linux.
 func summaryPath(cfg *Config) string {
 	switch cfg.DeploySummary {
 	case "off":
 		return ""
 	case "":
+		if runtime.GOOS == "windows" {
+			if dir := os.Getenv("LOCALAPPDATA"); dir != "" {
+				return filepath.Join(dir, "Simple Mod Framework", "deploySummary.json")
+			}
+			return ""
+		}
 		dir := os.Getenv("XDG_DATA_HOME")
 		if dir == "" {
 			home, err := os.UserHomeDir()

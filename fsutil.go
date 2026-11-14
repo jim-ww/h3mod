@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 )
 
 // lockGame takes an exclusive lock for changing game files, so two h3mod
@@ -16,9 +15,9 @@ func lockGame(cfg *Config) (unlock func(), err error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+	if err := lockFile(f); err != nil {
 		f.Close()
-		if errors.Is(err, syscall.EWOULDBLOCK) {
+		if errors.Is(err, errLocked) {
 			return nil, fmt.Errorf("another h3mod is deploying (%s is locked)", path)
 		}
 		return nil, err
@@ -57,10 +56,5 @@ func renameDurable(from, to string) error {
 	if err := os.Rename(from, to); err != nil {
 		return err
 	}
-	d, err := os.Open(filepath.Dir(to))
-	if err != nil {
-		return err
-	}
-	defer d.Close()
-	return d.Sync()
+	return syncDir(filepath.Dir(to))
 }
