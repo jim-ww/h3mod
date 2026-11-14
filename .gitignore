@@ -9,3 +9,5 @@
 /cache/
 /h3mod.lock
 /.direnv/
+/dist/
+/h3mod.exe

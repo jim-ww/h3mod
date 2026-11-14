@@ -42,12 +42,17 @@ options:
 deploying:
   deploy [-skip-unsupported] [-skip-intro=false] [-out dir]
   undeploy                     restore vanilla game files
+
+  help, version
   import-smf [config.json]     take load order and options from SMF
 
 <mod> is a number from status, a folder name, a mod ID, or a unique part of
 a mod's name. New folders in the mods directory are enabled automatically;
 deleted ones drop out of the load order.
 `
+
+// version is set at build time from VERSION.
+var version = "dev"
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -73,8 +78,12 @@ func run(ctx context.Context, args []string) error {
 	if fl.NArg() > 0 {
 		cmd, rest = fl.Arg(0), fl.Args()[1:]
 	}
-	if cmd == "help" {
+	switch cmd {
+	case "help":
 		fmt.Print(usage)
+		return nil
+	case "version":
+		fmt.Println("h3mod", version)
 		return nil
 	}
 	if cmd == "install" {
