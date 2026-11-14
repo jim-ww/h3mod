@@ -68,7 +68,8 @@ The easiest way to get them is `tools/` and `data/` from a release archive.
 Start `h3mod-gui` (`h3mod-gui.exe` on Windows). Install mods by dropping their
 archives on the window or with **Install mod…**, tick the ones you want,
 select a mod to pick its options, then press **Deploy**. Drag mods up or down
-to change the load order. **Restore vanilla** removes all mods from the game.
+to change the load order. Each mod shows whether it's deployed, and the line
+above **Deploy** says what the next deploy would change. **Restore vanilla** removes all mods from the game.
 Mods are kept in `mods/` next to the program.
 
     h3mod-gui [--config h3mod.json] [--game dir] [--mods dir]
@@ -102,7 +103,7 @@ to `h3mod.log` next to the config.
 
 ## Commands
 
-    status                         mods in load order, options, problems (also with no command)
+    status                         what's deployed, mods in load order, options, problems (also with no command)
     enable <mod>... | all / disable <mod>... | all
     move <mod> <position>
     install [--name n] [--replace] <archive|rpkg>
@@ -120,6 +121,10 @@ to `h3mod.log` next to the config.
 
 `<mod>` is a number from `status`, a folder name, a mod ID, or any part of
 the name only one mod has. On a first run every mod is enabled.
+
+Enabling, disabling, reordering and options only change what the next deploy
+does. `status` shows both: when the last deploy was and, per mod, whether it's
+deployed, not deployed yet, changed since, or removed on the next deploy.
 
 `install` takes what SMF's Mod Manager does: archives of framework mod
 folders, or `.rpkg` files that become an rpkg mod named by `-name`. Archives
