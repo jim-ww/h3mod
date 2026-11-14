@@ -118,6 +118,8 @@ to `h3mod.log` next to the config.
                                    take load order, options and intro setting from SMF (again)
     deploy [--skip-unsupported] [--skip-intro=false] [-o dir]
     undeploy
+    sdk [install | uninstall | enable | disable | mod <name> [on|off]]
+                                   ZHMModSDK: status, install/update, loader switch, its mods
     help [command], version, completion <shell>
 
 `--config`/`-c` picks the config; `h3mod <command> --help` explains a command.
@@ -139,6 +141,15 @@ Before each deploy the load order is sorted by the mods' `loadBefore` and
 `loadAfter` rules, keeping the current order where the rules allow. Option
 selections are saved with the mod version: when a mod updates, removed options
 are dropped, new ones get their defaults, and each change is reported.
+
+## ZHMModSDK
+
+`h3mod sdk install` (or **ZHMModSDK…** in the GUI) installs or updates
+[ZHMModSDK](https://github.com/OrfeasZ/ZHMModSDK) from its latest release.
+Every file it writes is recorded, and files it replaces are backed up, so
+`sdk uninstall` removes only h3mod's files and restores the rest. `sdk
+disable` turns the loader off without uninstalling, also for an SDK installed
+by hand. `sdk mod <name> on|off` turns its mods on and off (`mods.ini`).
 
 ## Completion
 
