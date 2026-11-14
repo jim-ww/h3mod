@@ -12,7 +12,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 
@@ -157,6 +156,7 @@ func (g *gui) build() {
 
 	install := widget.NewButtonWithIcon("Install mod…", theme.ContentAddIcon(), g.pickInstall)
 	importSMF := widget.NewButtonWithIcon("Import from SMF…", theme.FolderOpenIcon(), g.importSMF)
+	sdk := widget.NewButtonWithIcon("ZHMModSDK…", theme.ComputerIcon(), g.showSDK)
 	updates := widget.NewButtonWithIcon("Check for updates", theme.DownloadIcon(), func() { g.checkUpdates(true) })
 	autoUpdates := widget.NewCheck("Check on start", nil)
 	autoUpdates.Checked = g.cfg.CheckUpdates
@@ -174,13 +174,13 @@ func (g *gui) build() {
 		g.saveConfig()
 		g.refreshState()
 	}
-	g.actions = []fyne.Disableable{install, importSMF, updates, deploy, undeploy}
+	g.actions = []fyne.Disableable{install, importSMF, sdk, updates, deploy, undeploy}
 
 	folders := container.New(layout.NewFormLayout(),
 		widget.NewLabel("Game:"), container.NewBorder(nil, nil, nil, widget.NewButton("Change…", g.pickGame), g.gameLabel),
 		widget.NewLabel("Mods:"), container.NewBorder(nil, nil, nil, widget.NewButton("Change…", g.pickMods), g.modsLabel),
 	)
-	top := container.NewVBox(folders, container.NewHBox(install, importSMF, updates, autoUpdates, layout.NewSpacer(), skipIntro))
+	top := container.NewVBox(folders, container.NewHBox(install, importSMF, sdk, updates, autoUpdates, layout.NewSpacer(), skipIntro))
 
 	g.logText = widget.NewLabel("Drop mod archives on this window to install them. Drag mods to change the load order.")
 	g.logText.Wrapping = fyne.TextWrapWord
@@ -684,6 +684,96 @@ func (g *gui) importSMF() {
 		g.saveConfig()
 		g.reload()
 	}, g.win)
+}
+
+// showSDK opens ZHMModSDK's dialog: install, update, uninstall, the loader
+// switch and its mods.
+func (g *gui) showSDK() {
+	box := container.NewVBox()
+	var d *dialog.CustomDialog
+	var fill func()
+	fill = func() {
+		box.RemoveAll()
+		st, err := readSDKStatus(g.cfg)
+		if err != nil {
+			box.Add(widget.NewLabel(err.Error()))
+			return
+		}
+		install := widget.NewButtonWithIcon("Install", theme.DownloadIcon(), nil)
+		install.OnTapped = func() {
+			d.Hide()
+			g.busy(false, func() error {
+				v, err := installSDK(g.ctx, g.cfg, g.logf)
+				if err == nil {
+					g.logf("installed ZHMModSDK %s", v)
+				}
+				return err
+			}, func(err error) {
+				if err != nil {
+					g.showError(err)
+				}
+				g.showSDK()
+			})
+		}
+		switch {
+		case !st.Installed:
+			box.Add(widget.NewLabel("ZHMModSDK isn't installed. It adds in-game mods like free camera,\nfirst person or an editor, from its GitHub releases."))
+			box.Add(container.NewHBox(install))
+			return
+		case st.Ours:
+			box.Add(widget.NewLabel("ZHMModSDK " + st.Version + ", installed by h3mod"))
+			install.SetText("Update")
+		default:
+			box.Add(widget.NewLabel("ZHMModSDK, installed by hand. Installing replaces it; uninstalling\nthen brings this version back."))
+		}
+		uninstall := widget.NewButtonWithIcon("Uninstall", theme.DeleteIcon(), func() {
+			dialog.ShowConfirm("Uninstall ZHMModSDK", "Remove the files h3mod installed and restore what they replaced?", func(ok bool) {
+				if !ok {
+					return
+				}
+				if err := uninstallSDK(g.cfg, g.logf); err != nil {
+					g.showError(err)
+				}
+				fill()
+			}, g.win)
+		})
+		uninstall.Importance = widget.DangerImportance
+		if !st.Ours {
+			uninstall.Disable()
+		}
+		loader := widget.NewCheck("Load ZHMModSDK with the game", nil)
+		loader.Checked = st.Enabled
+		loader.OnChanged = func(on bool) {
+			if err := setSDKLoader(g.cfg, on); err != nil {
+				g.showError(err)
+			}
+			fill()
+		}
+		box.Add(container.NewHBox(install, uninstall))
+		box.Add(loader)
+		box.Add(widget.NewLabelWithStyle("Mods", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+		mods := container.NewGridWithColumns(2)
+		for _, m := range st.Mods {
+			c := widget.NewCheck(m.Name, nil)
+			c.Checked = m.Enabled
+			name := m.Name
+			c.OnChanged = func(on bool) {
+				if err := setSDKMod(g.cfg, name, on); err != nil {
+					g.showError(err)
+				}
+			}
+			if !st.Enabled {
+				c.Disable()
+			}
+			mods.Add(c)
+		}
+		box.Add(mods)
+		box.Refresh()
+	}
+	fill()
+	d = dialog.NewCustom("ZHMModSDK", "Close", container.NewVScroll(box), g.win)
+	d.Resize(fyne.NewSize(560, 560))
+	d.Show()
 }
 
 func (g *gui) pickInstall() {
