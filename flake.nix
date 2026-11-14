@@ -136,6 +136,9 @@
         packages = [ pkgs.go quickentity resourcetool pkgs.xdelta pkgs._7zz ];
         H3MOD_HASH_LIST = "${hash-list}";
         H3MOD_PATH_LIST = "${path-list}/hash_list.txt";
+        # h3mod needs no cgo, and without it go never calls gcc, whose flags
+        # from the shell break on the space in "HITMAN 3"
+        CGO_ENABLED = "0";
       };
     };
 }
