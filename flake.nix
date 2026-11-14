@@ -151,11 +151,26 @@
         pname = "h3mod";
         inherit version;
         src = self;
-        vendorHash = "sha256-Vod5Hnp7v93FvHW8J1BZm9OpAftI5XEaaaBFWy1JLaU=";
+        vendorHash = "sha256-wRpLNIjlbWOOhRTJ1kBr6bXmGIMzn4cdLpXLztEFY7M=";
         env.CGO_ENABLED = 0;
         ldflags = [ "-s" "-w" "-X main.version=${version}" ];
         doCheck = false;
       };
+      # the GUI, for nix users: Fyne needs cgo with OpenGL and X11
+      guiLibs = with pkgs; [ libGL libx11 libxcursor libxrandr libxinerama libxi libxxf86vm libxext wayland libxkbcommon ];
+      h3mod-gui-bin = pkgs.buildGoModule {
+        pname = "h3mod-gui";
+        inherit version;
+        src = self;
+        vendorHash = h3mod-bin.vendorHash;
+        tags = [ "gui" ];
+        nativeBuildInputs = [ pkgs.pkg-config ];
+        buildInputs = guiLibs;
+        ldflags = [ "-s" "-w" "-X main.version=${version}" ];
+        doCheck = false;
+        postInstall = "mv $out/bin/h3mod $out/bin/h3mod-gui";
+      };
+
       h3mod-windows = h3mod-bin.overrideAttrs (old: {
         env = old.env // { GOOS = "windows"; GOARCH = "amd64"; };
       });
@@ -194,6 +209,15 @@
         default = pkgs.runCommand "h3mod-${version}" { nativeBuildInputs = [ pkgs.makeWrapper ]; } ''
           makeWrapper ${h3mod-bin}/bin/h3mod $out/bin/h3mod \
             --prefix PATH : ${pkgs.lib.makeBinPath [ quickentity quickentity3 resourcetool pkgs.xdelta pkgs._7zz ]} \
+            --set-default H3MOD_HASH_LIST ${hash-list} \
+            --set-default H3MOD_PATH_LIST ${path-list}/hash_list.txt \
+            --set-default H3MOD_LEGACY_QN ${legacy-quickentity}
+        '';
+
+        gui = pkgs.runCommand "h3mod-gui-${version}" { nativeBuildInputs = [ pkgs.makeWrapper ]; } ''
+          makeWrapper ${h3mod-gui-bin}/bin/h3mod-gui $out/bin/h3mod-gui \
+            --prefix PATH : ${pkgs.lib.makeBinPath [ quickentity quickentity3 resourcetool pkgs.xdelta pkgs._7zz ]} \
+            --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath [ pkgs.libGL ]} \
             --set-default H3MOD_HASH_LIST ${hash-list} \
             --set-default H3MOD_PATH_LIST ${path-list}/hash_list.txt \
             --set-default H3MOD_LEGACY_QN ${legacy-quickentity}
