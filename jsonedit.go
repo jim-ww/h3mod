@@ -130,7 +130,7 @@ func (d *Deployer) applyJSONEdits(p *Plan) error {
 	var dests []*node
 	for _, e := range p.JSONEdits {
 		if err := d.applyJSONEdit(p, e, load); err != nil {
-			return fmt.Errorf("%s: %w", e.source, err)
+			return fmt.Errorf("%s: %w", d.modFile(e.source), err)
 		}
 		if e.kind == "contract" {
 			if add := e.doc.get("SMF", "destinations", "addToDestinations"); add != nil && string(add.raw) == "true" {

@@ -30,6 +30,7 @@ type entityJob struct {
 	qn         string  // entity.json to start from instead of binary files
 	qnVersion  float64 // its quickEntityVersion
 	patches    []entityPatch
+	sources    []string // the mod files the entity comes from, for errors
 }
 
 type entityPatch struct {
@@ -114,6 +115,7 @@ type entityRunner struct {
 	workDir  string // scratch space for running jobs
 
 	names func() (map[uint64]string, error) // paths for all jobs' references
+	label func(*entityJob) string           // how errors name a job
 }
 
 func (er *entityRunner) runAll(ctx context.Context, jobs []*entityJob) ([][2]*Resource, error) {
@@ -142,7 +144,7 @@ func (er *entityRunner) runAll(ctx context.Context, jobs []*entityJob) ([][2]*Re
 		g.Go(func() error {
 			temp, tblu, err := er.run(ctx, j)
 			if err != nil {
-				return fmt.Errorf("entity %016X: %w", j.temp, err)
+				return fmt.Errorf("%s: %w", er.label(j), err)
 			}
 			out[i] = [2]*Resource{temp, tblu}
 			return nil

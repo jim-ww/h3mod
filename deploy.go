@@ -45,6 +45,47 @@ func newDeployer(cfg *Config) *Deployer {
 
 func (d *Deployer) statePath() string { return d.cfg.abs("state.json") }
 
+// modFile names a file in errors by its mod: `mod "X" (path in the mod)`.
+func (d *Deployer) modFile(path string) string {
+	mod, file, ok := d.modOf(path)
+	if !ok {
+		return path
+	}
+	return fmt.Sprintf("mod %q (%s)", mod, file)
+}
+
+// modOf splits a path inside the mods folder into mod folder and file.
+func (d *Deployer) modOf(path string) (mod, file string, ok bool) {
+	rel, err := filepath.Rel(d.cfg.abs(d.cfg.Mods), path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", "", false
+	}
+	mod, file, _ = strings.Cut(filepath.ToSlash(rel), "/")
+	return mod, file, true
+}
+
+// modsOf names the mods that files belong to, for errors about results
+// several mods contribute to.
+func (d *Deployer) modsOf(paths []string) string {
+	var mods []string
+	for _, p := range paths {
+		if m, _, ok := d.modOf(p); ok && !slices.Contains(mods, m) {
+			mods = append(mods, m)
+		}
+	}
+	switch len(mods) {
+	case 0:
+		return ""
+	case 1:
+		return fmt.Sprintf("mod %q: ", mods[0])
+	}
+	q := make([]string, len(mods))
+	for i, m := range mods {
+		q[i] = strconv.Quote(m)
+	}
+	return "mods " + strings.Join(q, ", ") + ": "
+}
+
 // skippedLines describes what a plan leaves out, one line per mod.
 func skippedLines(p *Plan) []string {
 	var out []string
@@ -240,6 +281,9 @@ func (d *Deployer) buildEntities(ctx context.Context, p *Plan) error {
 		return err
 	}
 	er := &entityRunner{
+		label: func(j *entityJob) string {
+			return fmt.Sprintf("%sentity %016X", d.modsOf(j.sources), j.temp)
+		},
 		tools:    tools,
 		idx:      idx,
 		pathList: pathList,
@@ -315,7 +359,7 @@ func (d *Deployer) upgradeLegacy(ctx context.Context, jobs []*entityJob, tools T
 		if j.qn != "" && j.qnVersion < 3.1 {
 			up, err := u.entity(ctx, j.qn, j.qnVersion)
 			if err != nil {
-				return fmt.Errorf("upgrading %s: %w", j.qn, err)
+				return fmt.Errorf("%s: upgrading from QuickEntity %v: %w", d.modFile(j.qn), j.qnVersion, err)
 			}
 			j.qn, j.qnVersion = up, 3.1
 			n++
@@ -335,7 +379,7 @@ func (d *Deployer) upgradeLegacy(ctx context.Context, jobs []*entityJob, tools T
 			}
 			up, err := u.patchCached(ctx, p.path, p.version, temp, tblu, names)
 			if err != nil {
-				return fmt.Errorf("upgrading %s: %w", p.path, err)
+				return fmt.Errorf("%s: upgrading from patch version %v: %w", d.modFile(p.path), p.version, err)
 			}
 			j.patches[i] = entityPatch{up, 6}
 			n++
@@ -358,7 +402,7 @@ func (d *Deployer) buildTextures(p *Plan) error {
 	vanilla := func(h uint64) *Resource { return idx.res[h] }
 	for _, j := range p.Textures {
 		if err := j.build(cache, vanilla); err != nil {
-			return fmt.Errorf("%s: %w", j.path, err)
+			return fmt.Errorf("%s: %w", d.modFile(j.path), err)
 		}
 	}
 	d.log("textures: %d in %s", len(p.Textures), time.Since(start).Round(time.Millisecond))
@@ -419,7 +463,7 @@ func (d *Deployer) buildDeltas(ctx context.Context, p *Plan) error {
 	}
 	for _, j := range p.Deltas {
 		if err := j.build(ctx, idx, d.cfg.abs(filepath.Join("cache", "deltas")), d.cfg.abs(filepath.Join("cache", "work"))); err != nil {
-			return fmt.Errorf("%s: %w", j.path, err)
+			return fmt.Errorf("%s: %w", d.modFile(j.path), err)
 		}
 	}
 	return nil
@@ -436,7 +480,7 @@ func (d *Deployer) buildWWEVs(p *Plan) error {
 	}
 	for _, j := range p.WWEVs {
 		if err := j.build(idx); err != nil {
-			return fmt.Errorf("WWEV %s: %w", hashString(j.out.Hash), err)
+			return fmt.Errorf("%sWWEV %s: %w", d.modsOf(slices.Collect(maps.Values(j.wems))), hashString(j.out.Hash), err)
 		}
 		for _, res := range p.Chunks {
 			delete(res, j.out.Hash)
@@ -456,7 +500,7 @@ func (d *Deployer) buildRTLVs(ctx context.Context, p *Plan) error {
 	}
 	for _, j := range p.RTLVs {
 		if err := j.build(ctx, tools, d.cfg.abs(filepath.Join("cache", "rtlv")), d.cfg.abs(filepath.Join("cache", "work"))); err != nil {
-			return fmt.Errorf("%s: %w", j.path, err)
+			return fmt.Errorf("%s: %w", d.modFile(j.path), err)
 		}
 	}
 	return nil

@@ -131,7 +131,7 @@ func buildPlan(cfg *Config, game *gameData, deploying bool) (*Plan, error) {
 		}
 		p.checkRelations(m, sel, enabled)
 		if err := p.addMod(m, sel); err != nil {
-			return nil, fmt.Errorf("%s: %w", m.Dir, err)
+			return nil, fmt.Errorf("mod %q: %w", m.Dir, err)
 		}
 	}
 	for _, f := range p.fallback {
@@ -327,7 +327,8 @@ func (p *Plan) addContentFolder(m *Mod, dir string) error {
 		}
 		chunk, _ := strconv.Atoi(cm[1])
 		if err := p.addContentFile(m, chunk, path); err != nil {
-			return fmt.Errorf("%s: %w", rel, err)
+			inMod, _ := filepath.Rel(m.Path, path)
+			return fmt.Errorf("%s: %w", filepath.ToSlash(inMod), err)
 		}
 		return nil
 	})
@@ -370,7 +371,7 @@ func (p *Plan) addContentFile(m *Mod, chunk int, path string) error {
 			p.skip(m.Dir, "entity.json quickEntityVersion "+h.QuickEntityVersion.String())
 			return nil
 		}
-		j := &entityJob{chunk: chunk, temp: temp, tblu: tblu, qn: path, qnVersion: v}
+		j := &entityJob{chunk: chunk, temp: temp, tblu: tblu, qn: path, qnVersion: v, sources: []string{path}}
 		p.removeEntity(temp)
 		p.entity[temp] = j
 		p.Entities = append(p.Entities, j)
@@ -499,6 +500,7 @@ func (p *Plan) addEntityPatch(chunk int, temp, tblu uint64, patch entityPatch) {
 		p.Entities = append(p.Entities, j)
 	}
 	j.patches = append(j.patches, patch)
+	j.sources = append(j.sources, patch.path)
 }
 
 // readRawFile reads a resource file with its rpkg-tool .meta (binary) or
