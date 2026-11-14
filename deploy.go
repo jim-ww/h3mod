@@ -22,7 +22,7 @@ const tmpSuffix = ".h3mod-tmp"
 var (
 	patchLevel     = regexp.MustCompile(`patchlevel=[0-9]+`)
 	moddedPD       = []byte("patchlevel=310")
-	errUnsupported = errors.New("enabled mods use unsupported features (use -skip-unsupported to deploy without them)")
+	errUnsupported = errors.New("enabled mods use unsupported features (use --skip-unsupported to deploy without them)")
 )
 
 // Deployer writes mods into the game. Base game archives are never written:

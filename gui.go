@@ -30,12 +30,12 @@ import (
 // user config folder when that isn't writable), so unpacking the release
 // into the HITMAN 3 folder and starting it is all the setup there is.
 
-const guiUsage = `usage: h3mod-gui [-config h3mod.json] [-game dir] [-mods dir]
+const guiUsage = `usage: h3mod-gui [--config h3mod.json] [--game dir] [--mods dir]
        h3mod-gui [--config h3mod.json] <command> [args]   (like h3mod; see h3mod-gui help)
 
-  -config  config file (default: h3mod.json next to the program)
-  -game    HITMAN 3 folder; saved to the config
-  -mods    folder of unpacked mods; saved to the config
+  --config  config file (default: h3mod.json next to the program)
+  --game    HITMAN 3 folder; saved to the config
+  --mods    folder of unpacked mods; saved to the config
 `
 
 func main() {

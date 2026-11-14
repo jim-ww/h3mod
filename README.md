@@ -71,9 +71,9 @@ select a mod to pick its options, then press **Deploy**. Drag mods up or down
 to change the load order. **Restore vanilla** removes all mods from the game.
 Mods are kept in `mods/` next to the program.
 
-    h3mod-gui [-config h3mod.json] [-game dir] [-mods dir]
+    h3mod-gui [--config h3mod.json] [--game dir] [--mods dir]
 
-`-game` and `-mods` set the folders and save them to the config. Given a
+`--game` and `--mods` set the folders and save them to the config. Given a
 command, `h3mod-gui` works like `h3mod` (`h3mod-gui deploy`, `h3mod-gui help`),
 with the same config as its window. On Windows the output then appears after
 the prompt, since the shell doesn't wait for GUI programs; `start /wait

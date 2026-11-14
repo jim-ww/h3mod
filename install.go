@@ -175,7 +175,7 @@ func placeMod(m stagedMod, modsDir, dir, stage string, replace bool) error {
 	old := ""
 	if _, err := os.Lstat(dst); err == nil {
 		if !replace {
-			return fmt.Errorf("%s is already installed; use update, or install -replace", dir)
+			return fmt.Errorf("%s is already installed; use update, or install --replace", dir)
 		}
 		old = filepath.Join(stage, "old-"+dir)
 		if err := os.Rename(dst, old); err != nil {
