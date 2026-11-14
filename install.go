@@ -1,13 +1,11 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -97,28 +95,6 @@ func stageMods(ctx context.Context, src, stage, rpkgName string) ([]stagedMod, e
 		}
 	}
 	return []stagedMod{{dir: rpkgName, path: path, id: rpkgName}}, nil
-}
-
-func extractArchive(ctx context.Context, src, dst string) error {
-	// 7-Zip's own Linux build is 7zz; p7zip and Windows have 7z
-	sz, err := toolPath("7zz")
-	if err != nil {
-		if sz, err = toolPath("7z"); err != nil {
-			return err
-		}
-	}
-	abs, err := filepath.Abs(src)
-	if err != nil {
-		return err
-	}
-	var out bytes.Buffer
-	cmd := exec.CommandContext(ctx, sz, "x", "-y", "-bd", "-o"+dst, abs)
-	hideWindow(cmd)
-	cmd.Stdout, cmd.Stderr = &out, &out
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("extracting %s: %w: %s", src, err, strings.TrimSpace(out.String()))
-	}
-	return nil
 }
 
 // checkUnpacked rejects anything but plain files and folders, so an archive

@@ -1,3 +1,2 @@
 - add simple install/uninstall (or enable/disable toggle) for ZHM mod manager
 - instead of shipping tools together with binary, embed in binary itself? and separate gui , cli releases
-- remove 7z dependency? e.g. use go stdlib

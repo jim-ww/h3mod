@@ -133,17 +133,6 @@
         }} hash_list.txt
       '';
 
-      # official static 7-Zip build for the bundle
-      sevenzip-static = pkgs.runCommand "7zzs-25.01" { } ''
-        mkdir -p $out/bin
-        tar xJf ${pkgs.fetchurl {
-          url = "https://www.7-zip.org/a/7z2501-linux-x64.tar.xz";
-          hash = "sha256-TKO3xvL2eGa5JiKBi1gjPccDZ74vNrSY6wveqqRLU/Q=";
-        }} 7zzs License.txt
-        install -m755 7zzs $out/bin/7zz
-        cp License.txt $out/7-Zip-License.txt
-      '';
-
       # static, so the same binary runs on any x86_64 Linux
       version = pkgs.lib.fileContents ./VERSION;
 
@@ -151,7 +140,7 @@
         pname = "h3mod";
         inherit version;
         src = self;
-        vendorHash = "sha256-Okoa2MAawu5VfsMYMiESoFc3xgAkwvBA1Ch8Gu2pTSo=";
+        vendorHash = "sha256-sjJdMx4D73uhAuXAcPYcXzTekjJnm+3+EmGoFv+Qlzc=";
         env.CGO_ENABLED = 0;
         ldflags = [ "-s" "-w" "-X main.version=${version}" ];
         doCheck = false;
@@ -221,7 +210,7 @@
       windows-tools = pkgs.runCommand "h3mod-windows-tools" { nativeBuildInputs = [ pkgs._7zz ]; } ''
         mkdir -p $out
         7zz e -o$out ${smf-release} Third-Party/quickentity-rs.exe Third-Party/quickentity-3.exe \
-          Third-Party/xdelta3.exe Third-Party/xdelta3-LICENSE Third-Party/7z.exe Third-Party/7z.dll Third-Party/7z-LICENSE
+          Third-Party/xdelta3.exe Third-Party/xdelta3-LICENSE
         7zz e -o$out ${resourcetool-win} ResourceTool.exe '*.dll'
         cp ${resourcetool-bin}/LICENSE $out/ResourceTool-LICENSE
       '';
@@ -253,7 +242,7 @@
         inherit h3mod-gui-windows h3mod-gui-linux;
         default = pkgs.runCommand "h3mod-${version}" { nativeBuildInputs = [ pkgs.makeWrapper pkgs.installShellFiles ]; } ''
           makeWrapper ${h3mod-bin}/bin/h3mod $out/bin/h3mod \
-            --prefix PATH : ${pkgs.lib.makeBinPath [ quickentity quickentity3 resourcetool pkgs.xdelta pkgs._7zz ]} \
+            --prefix PATH : ${pkgs.lib.makeBinPath [ quickentity quickentity3 resourcetool pkgs.xdelta ]} \
             --set-default H3MOD_HASH_LIST ${hash-list} \
             --set-default H3MOD_PATH_LIST ${path-list}/hash_list.txt \
             --set-default H3MOD_LEGACY_QN ${legacy-quickentity}
@@ -262,7 +251,7 @@
 
         gui = pkgs.runCommand "h3mod-gui-${version}" { nativeBuildInputs = [ pkgs.makeWrapper pkgs.installShellFiles ]; } ''
           makeWrapper ${h3mod-gui-bin}/bin/h3mod-gui $out/bin/h3mod-gui \
-            --prefix PATH : ${pkgs.lib.makeBinPath [ quickentity quickentity3 resourcetool pkgs.xdelta pkgs._7zz ]} \
+            --prefix PATH : ${pkgs.lib.makeBinPath [ quickentity quickentity3 resourcetool pkgs.xdelta ]} \
             --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath [ pkgs.libGL ]} \
             --set-default H3MOD_HASH_LIST ${hash-list} \
             --set-default H3MOD_PATH_LIST ${path-list}/hash_list.txt \
@@ -278,12 +267,11 @@
           ${bundleCommon "$d"}
           cp ${h3mod-bin}/bin/h3mod ${h3mod-gui-linux}/bin/h3mod-gui $d/
           cp ${quickentity-static}/bin/quickentity-rs ${quickentity3-static}/bin/quickentity-3 ${pkgs.pkgsStatic.xdelta}/bin/xdelta3 \
-            ${sevenzip-static}/bin/7zz ${resourcetool-bin}/ResourceTool ${resourcetool-bin}/*.so $d/tools/
+            ${resourcetool-bin}/ResourceTool ${resourcetool-bin}/*.so $d/tools/
           cp ${resourcetool-bin}/LICENSE $d/tools/ResourceTool-LICENSE
-          cp ${sevenzip-static}/7-Zip-License.txt $d/tools/
           ${bundleCompletions "$d" [ "bash" "zsh" "fish" ]}
           chmod -R u+w $d
-          chmod +x $d/h3mod $d/h3mod-gui $d/tools/{quickentity-rs,quickentity-3,xdelta3,7zz,ResourceTool}
+          chmod +x $d/h3mod $d/h3mod-gui $d/tools/{quickentity-rs,quickentity-3,xdelta3,ResourceTool}
           mkdir $out
           tar czf $out/h3mod-${version}-linux-x64.tar.gz $d
         '';

@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -32,9 +33,6 @@ func writeZip(t *testing.T, path string, files map[string]string, links map[stri
 }
 
 func TestInstallMods(t *testing.T) {
-	if _, err := toolPath("7zz"); err != nil {
-		t.Skip(err)
-	}
 	root := t.TempDir()
 	mods := filepath.Join(root, "Mods")
 	os.Mkdir(mods, 0o755)
@@ -95,5 +93,34 @@ func TestInstallMods(t *testing.T) {
 	}
 	if ents, _ := os.ReadDir(mods); len(ents) != 2 {
 		t.Fatalf("leftovers in mods dir: %v", ents)
+	}
+}
+
+// 7z archives unpack too; making one needs 7-Zip, so the test runs only
+// where it's installed.
+func TestInstall7z(t *testing.T) {
+	sz, err := exec.LookPath("7zz")
+	if err != nil {
+		t.Skip("7zz not installed")
+	}
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	os.MkdirAll(filepath.Join(src, "Mod B", "content", "chunk0"), 0o755)
+	os.WriteFile(filepath.Join(src, "Mod B", "manifest.json"), []byte(`{"id":"b.mod","name":"B","version":"1.0.0","contentFolders":["content"]}`), 0o644)
+	os.WriteFile(filepath.Join(src, "Mod B", "content", "chunk0", "x.entity.json"), []byte("{}"), 0o644)
+	archive := filepath.Join(root, "b.7z")
+	cmd := exec.Command(sz, "a", archive, "Mod B")
+	cmd.Dir = src
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("7zz: %v\n%s", err, out)
+	}
+	mods := filepath.Join(root, "Mods")
+	os.Mkdir(mods, 0o755)
+	cfg := &Config{Mods: mods, path: filepath.Join(root, "h3mod.json")}
+	if dirs, err := installMods(t.Context(), cfg, archive, "", false, "", ""); err != nil || !slices.Equal(dirs, []string{"Mod B"}) {
+		t.Fatalf("install = %v, %v", dirs, err)
+	}
+	if _, err := os.Stat(filepath.Join(mods, "Mod B", "content", "chunk0", "x.entity.json")); err != nil {
+		t.Fatal(err)
 	}
 }

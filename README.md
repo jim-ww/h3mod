@@ -57,7 +57,6 @@ and `data/` next to the binary, in PATH, or in the given variables:
 | QuickEntity 3.0 files | `quickentity-3` (quickentity-rs rev 30f394e) |
 | QuickEntity before 3.0 | SMF's QuickEntity scripts and npm packages (`H3MOD_LEGACY_QN`) |
 | `.delta` files | xdelta3 |
-| `install` from archives | 7-Zip (`7zz` or `7z`) |
 
 The easiest way to get them is `tools/` and `data/` from a release archive.
 
