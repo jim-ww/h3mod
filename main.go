@@ -9,163 +9,14 @@ import (
 	"bufio"
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 )
-
-const usage = `usage: h3mod [-config h3mod.json] [command] [args]
-
-Without a command, h3mod shows status. h3mod-gui takes the same commands and
-opens its window without one.
-
-mods:
-  status                       list enabled and disabled mods, options, problems
-  enable <mod>... | all        enable mods (appended to the load order)
-  disable <mod>... | all       disable mods
-  move <mod> <position>        move a mod in the load order (later wins)
-  install [-name n] [-replace] <archive|rpkg>
-                               add mods from a zip/7z/rar or .rpkg to the mods dir
-  updates                      check mods' update URLs for new versions
-  update <mod>...              download and install new versions
-
-options:
-  options [mod]                mods with options, or one mod's options
-  option <mod> <option> [on|off]
-                               select an option ("Group:Name" for choices)
-  reset-options <mod>          go back to the mod's defaults
-
-deploying:
-  deploy [-skip-unsupported] [-skip-intro=false] [-out dir]
-  undeploy                     restore vanilla game files
-
-  help, version
-  import-smf [config.json]     take load order and options from SMF
-
-<mod> is a number from status, a folder name, a mod ID, or a unique part of
-a mod's name. New folders in the mods directory are enabled automatically;
-deleted ones drop out of the load order.
-`
-
-// version is set at build time from VERSION.
-var version = "dev"
-
-// defaultConfig is the config used without -config: h3mod.json in the
-// current directory, or for h3mod-gui the one next to the program.
-var defaultConfig = "h3mod.json"
-
-// cliMain runs a command line; h3mod-gui uses it too when given a command.
-func cliMain() {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	if err := run(ctx, os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		logLine("error: %v", err)
-		os.Exit(1)
-	}
-	logLine("done")
-}
-
-// hasCommand reports whether args name a command rather than only flags,
-// which tells h3mod-gui to act like the CLI.
-func hasCommand(args []string) bool {
-	for i := 0; i < len(args); i++ {
-		a := strings.TrimLeft(args[i], "-")
-		switch {
-		case !strings.HasPrefix(args[i], "-"):
-			return true
-		case a == "config" || a == "game" || a == "mods":
-			i++ // the flag's value
-		}
-	}
-	return false
-}
-
-func run(ctx context.Context, args []string) error {
-	fl := flag.NewFlagSet("h3mod", flag.ContinueOnError)
-	fl.Usage = func() { fmt.Fprint(os.Stderr, usage) }
-	cfgPath := fl.String("config", defaultConfig, "config file")
-	if err := fl.Parse(args); err != nil {
-		return err
-	}
-	cfg, err := loadConfig(*cfgPath)
-	if err != nil {
-		return err
-	}
-	cmd, rest := "status", []string(nil)
-	if fl.NArg() > 0 {
-		cmd, rest = fl.Arg(0), fl.Args()[1:]
-	}
-	switch cmd {
-	case "help":
-		fmt.Print(usage)
-		return nil
-	case "version":
-		fmt.Println("h3mod", version)
-		return nil
-	}
-	if cmd == "install" {
-		if err := os.MkdirAll(cfg.abs(cfg.Mods), 0o755); err != nil {
-			return err
-		}
-	}
-	switch cmd {
-	case "status", "options", "help", "version", "updates":
-	default: // commands that change something
-		openRunLog(cfg, fmt.Sprintf("h3mod %s: %s", version, strings.Join(args, " ")))
-	}
-	if err := firstRun(cfg); err != nil {
-		return err
-	}
-	if err := syncMods(cfg); err != nil {
-		return err
-	}
-	switch cmd {
-	case "status":
-		return status(cfg)
-	case "enable", "disable":
-		return toggle(cfg, cmd == "enable", rest)
-	case "move":
-		return move(cfg, rest)
-	case "install":
-		return installCmd(ctx, cfg, rest)
-	case "updates":
-		return updatesCmd(ctx, cfg)
-	case "update":
-		return updateCmd(ctx, cfg, rest)
-	case "options":
-		return listOptions(cfg, rest)
-	case "option":
-		return setOption(cfg, rest)
-	case "reset-options":
-		return resetOptions(cfg, rest)
-	case "import-smf":
-		return importSMFCmd(cfg, rest)
-	case "deploy":
-		dfl := flag.NewFlagSet("deploy", flag.ContinueOnError)
-		skip := dfl.Bool("skip-unsupported", false, "deploy without features h3mod doesn't support")
-		out := dfl.String("out", "", "write output to this directory instead of the game")
-		intro := dfl.Bool("skip-intro", cfg.skipIntro(), "start at the main menu (default from the config's skipIntro, on if unset)")
-		if err := dfl.Parse(rest); err != nil {
-			return err
-		}
-		d := newDeployer(cfg)
-		d.skipIntro = *intro
-		terminalProgress(d)
-		return d.Deploy(ctx, *skip, *out)
-	case "undeploy":
-		return newDeployer(cfg).Undeploy()
-	}
-	fl.Usage()
-	return fmt.Errorf("unknown command %q", cmd)
-}
 
 // terminalProgress shows deploy progress on one updating line when stdout
 // is a terminal, with log lines printed above it.
@@ -274,9 +125,6 @@ func status(cfg *Config) error {
 }
 
 func toggle(cfg *Config, on bool, names []string) error {
-	if len(names) == 0 {
-		return errors.New("no mods given")
-	}
 	mods, err := discoverMods(cfg.abs(cfg.Mods))
 	if err != nil {
 		return err
@@ -309,21 +157,11 @@ func toggle(cfg *Config, on bool, names []string) error {
 	return cfg.save()
 }
 
-func installCmd(ctx context.Context, cfg *Config, args []string) error {
-	fl := flag.NewFlagSet("install", flag.ContinueOnError)
-	name := fl.String("name", "", "folder name for an rpkg mod (default: the file's name)")
-	replace := fl.Bool("replace", false, "replace mods that are already installed")
-	if err := fl.Parse(args); err != nil {
-		return err
+func installCmd(ctx context.Context, cfg *Config, src, rpkgName string, replace bool) error {
+	if rpkgName == "" {
+		rpkgName = strings.TrimSuffix(filepath.Base(src), filepath.Ext(src))
 	}
-	if fl.NArg() != 1 {
-		return errors.New("usage: install [-name n] [-replace] <archive|rpkg>")
-	}
-	src := fl.Arg(0)
-	if *name == "" {
-		*name = strings.TrimSuffix(filepath.Base(src), filepath.Ext(src))
-	}
-	dirs, err := installMods(ctx, cfg, src, *name, *replace, "", "")
+	dirs, err := installMods(ctx, cfg, src, rpkgName, replace, "", "")
 	for _, d := range dirs {
 		fmt.Println("installed", d)
 	}
@@ -363,9 +201,6 @@ func printIndented(s string) {
 }
 
 func updateCmd(ctx context.Context, cfg *Config, names []string) error {
-	if len(names) == 0 {
-		return errors.New("usage: update <mod>...")
-	}
 	for _, n := range names {
 		m, err := loadMod(cfg, n)
 		if err != nil {
@@ -391,17 +226,14 @@ func updateCmd(ctx context.Context, cfg *Config, names []string) error {
 	return nil
 }
 
-func move(cfg *Config, args []string) error {
-	if len(args) != 2 {
-		return errors.New("usage: move <mod> <position>")
-	}
-	m, err := loadMod(cfg, args[0])
+func move(cfg *Config, mod, position string) error {
+	m, err := loadMod(cfg, mod)
 	if err != nil {
 		return err
 	}
-	pos, err := strconv.Atoi(args[1])
+	pos, err := strconv.Atoi(position)
 	if err != nil || pos < 1 {
-		return fmt.Errorf("invalid position %q", args[1])
+		return fmt.Errorf("invalid position %q", position)
 	}
 	i := slices.Index(cfg.Enabled, m.Dir)
 	if i < 0 {
@@ -446,9 +278,6 @@ func shellQuote(s string) string {
 func listOptions(cfg *Config, args []string) error {
 	if len(args) == 0 {
 		return listModsWithOptions(cfg)
-	}
-	if len(args) != 1 {
-		return errors.New("usage: options [mod]")
 	}
 	m, err := loadMod(cfg, args[0])
 	if err != nil {
@@ -503,9 +332,6 @@ func setOption(cfg *Config, args []string) error {
 	if len(args) == 1 {
 		return listOptions(cfg, args)
 	}
-	if len(args) > 3 {
-		return errors.New("usage: option <mod> <option> [on|off]")
-	}
 	m, err := loadMod(cfg, args[0])
 	if err != nil {
 		return err
@@ -526,11 +352,8 @@ func setOption(cfg *Config, args []string) error {
 	return cfg.save()
 }
 
-func resetOptions(cfg *Config, args []string) error {
-	if len(args) != 1 {
-		return errors.New("usage: reset-options <mod>")
-	}
-	m, err := loadMod(cfg, args[0])
+func resetOptions(cfg *Config, mod string) error {
+	m, err := loadMod(cfg, mod)
 	if err != nil {
 		return err
 	}

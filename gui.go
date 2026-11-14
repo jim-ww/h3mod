@@ -31,7 +31,7 @@ import (
 // into the HITMAN 3 folder and starting it is all the setup there is.
 
 const guiUsage = `usage: h3mod-gui [-config h3mod.json] [-game dir] [-mods dir]
-       h3mod-gui [-config h3mod.json] <command> [args]   (like h3mod; see h3mod-gui help)
+       h3mod-gui [--config h3mod.json] <command> [args]   (like h3mod; see h3mod-gui help)
 
   -config  config file (default: h3mod.json next to the program)
   -game    HITMAN 3 folder; saved to the config
@@ -42,7 +42,7 @@ func main() {
 	if hasCommand(os.Args[1:]) {
 		attachConsole()
 		defaultConfig = guiConfigPath() // the same mods as the window
-		cliMain()
+		cliMain("h3mod-gui")
 		return
 	}
 	fl := flag.NewFlagSet("h3mod-gui", flag.ContinueOnError)

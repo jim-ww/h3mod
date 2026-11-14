@@ -33,21 +33,37 @@ func hideWindow(cmd *exec.Cmd) {
 // console, to the terminal it was started from, so h3mod-gui can run CLI
 // commands there.
 func attachConsole() {
+	// Handles the caller redirected (pipes, files, shell completion) work
+	// already; only missing ones go to the parent's console.
+	missing := func(f *os.File) bool {
+		h := windows.Handle(f.Fd())
+		return h == 0 || h == windows.InvalidHandle
+	}
+	if !missing(os.Stdout) && !missing(os.Stderr) && !missing(os.Stdin) {
+		return
+	}
 	const attachParentProcess = ^uint32(0)
 	attach := windows.NewLazySystemDLL("kernel32.dll").NewProc("AttachConsole")
 	if r, _, _ := attach.Call(uintptr(attachParentProcess)); r == 0 {
 		return // started without a terminal
 	}
+	reopened := false
 	for _, f := range []struct {
 		name string
 		std  **os.File
 	}{{"CONOUT$", &os.Stdout}, {"CONOUT$", &os.Stderr}, {"CONIN$", &os.Stdin}} {
+		if !missing(*f.std) {
+			continue
+		}
 		h, err := windows.CreateFile(windows.StringToUTF16Ptr(f.name), windows.GENERIC_READ|windows.GENERIC_WRITE,
 			windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, nil, windows.OPEN_EXISTING, 0, 0)
 		if err == nil {
 			*f.std = os.NewFile(uintptr(h), f.name)
+			reopened = reopened || f.std == &os.Stdout
 		}
 	}
-	// The shell doesn't wait for GUI programs and has printed its prompt.
-	os.Stdout.WriteString("\n")
+	if reopened {
+		// The shell doesn't wait for GUI programs and has printed its prompt.
+		os.Stdout.WriteString("\n")
+	}
 }

@@ -2,4 +2,4 @@
 
 package main
 
-func main() { cliMain() }
+func main() { cliMain("h3mod") }
