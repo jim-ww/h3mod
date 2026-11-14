@@ -23,7 +23,8 @@ import (
 
 const usage = `usage: h3mod [-config h3mod.json] [command] [args]
 
-Without a command, h3mod shows status.
+Without a command, h3mod shows status. h3mod-gui takes the same commands and
+opens its window without one.
 
 mods:
   status                       list enabled and disabled mods, options, problems
