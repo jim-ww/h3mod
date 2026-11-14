@@ -1,8 +1,9 @@
 # h3mod
 
-A blazing fast mod manager for HITMAN 3, written in Go. A command-line
-alternative to SMF (Simple Mod Framework) that installs and deploys the same
-mods: SMF framework mods and plain rpkg mods, as they are.
+A blazing fast mod manager for HITMAN 3, written in Go. An alternative to SMF
+(Simple Mod Framework) that installs and deploys the same mods, SMF framework
+mods and plain rpkg mods, as they are: `h3mod` for the terminal, `h3mod-gui`
+for everyone else.
 
 - **Fast.** Deploys only rebuild what changed; entities and textures are
   built in parallel and cached.
@@ -16,7 +17,9 @@ mods: SMF framework mods and plain rpkg mods, as they are.
 - **Safe.** Base game archives are never written. Every file is replaced
   atomically, so an interrupted deploy leaves the game as it was, and
   `undeploy` restores vanilla.
-- Linux and Windows, no GUI, single binary with its tools next to it.
+- **Simple GUI.** Drop mod archives on the window, tick mods, pick options,
+  press Deploy. It finds the game on its own.
+- Linux and Windows, one download with all tools included.
 
 ## Install
 
@@ -24,18 +27,23 @@ mods: SMF framework mods and plain rpkg mods, as they are.
 
 Download `h3mod-<version>-linux-x64.tar.gz` or `h3mod-<version>-windows-x64.zip`
 from [releases](https://github.com/jim-ww/h3mod/releases) and unpack it into
-the HITMAN 3 folder. The archive has the binary plus the tools and hash lists
-it needs (`tools/`, `data/`). The Linux build needs glibc 2.34+; on NixOS use
-nix.
+the HITMAN 3 folder. The archive has `h3mod`, `h3mod-gui` and the tools and
+hash lists they need (`tools/`, `data/`). Linux needs glibc 2.34+; on NixOS
+use nix.
 
 ### Nix (preferred)
 
     nix run github:jim-ww/h3mod -- status
-    nix profile install github:jim-ww/h3mod
+    nix run github:jim-ww/h3mod#gui
+    nix profile install github:jim-ww/h3mod github:jim-ww/h3mod#gui
 
 ### Go
 
     go install github.com/jim-ww/h3mod@latest
+    go install -tags gui github.com/jim-ww/h3mod@latest   # the GUI, also named h3mod
+
+The GUI needs cgo with OpenGL and X11/Wayland headers (see
+[Fyne](https://docs.fyne.io/started/)).
 
 The binary alone can deploy mods that only use plain Go features. Entities,
 `dlge.json`, `.delta` files and installing archives need these, in `tools/`
@@ -54,6 +62,15 @@ and `data/` next to the binary, in PATH, or in the given variables:
 The easiest way to get them is `tools/` and `data/` from a release archive.
 
 ## Usage
+
+### GUI
+
+Start `h3mod-gui` (`h3mod-gui.exe` on Windows). Install mods by dropping their
+archives on the window or with **Install mod…**, tick the ones you want,
+select a mod to pick its options, then press **Deploy**. **Restore vanilla**
+removes all mods from the game. Mods are kept in `mods/` next to the program.
+
+### Terminal
 
 From the folder the release was unpacked to (inside the HITMAN 3 folder):
 
@@ -99,8 +116,9 @@ are dropped, new ones get their defaults, and each change is reported.
 
 ## Config
 
-`h3mod.json` in the current directory (`-config` to change). Without one,
-these defaults apply; relative paths are relative to the config.
+`h3mod.json` in the current directory (`-config` to change); the GUI uses the
+one next to it, so both share it when run from the release folder. Without
+one, these defaults apply; relative paths are relative to the config.
 
     {
       "game": "..",               // HITMAN 3 folder
@@ -152,6 +170,7 @@ must be kept.
 ## Building
 
     make build       # ./h3mod for this system
+    make gui         # h3mod-gui, via nix
     make test        # in the nix dev shell
 
 `nix develop` (or direnv) gives a shell with all tools for `go run .`.
