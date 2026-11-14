@@ -122,7 +122,7 @@ func writeDeploySummary(cfg *Config, p *Plan, path string) error {
 		H3mod:                true,
 		RuntimePath:          cfg.runtimeDir(),
 		RetailPath:           filepath.Join(cfg.abs(cfg.Game), "Retail"),
-		SkipIntro:            cfg.SkipIntro,
+		SkipIntro:            cfg.skipIntro(),
 		LoadOrder:            []string{},
 		ModOptions:           map[string][]string{},
 		Platform:             platform,

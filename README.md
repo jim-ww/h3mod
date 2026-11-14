@@ -40,7 +40,7 @@ HITMAN 3 folder, next to `mods/`. Relative paths are relative to the config.
       "mods": "mods",             // folder of unpacked mods, e.g. "../SMF/Mods"
       "enabled": ["Mod A", ...],  // folder names, in load order; later wins
       "options": {...},           // chosen options per mod
-      "skipIntro": true,
+      "skipIntro": false,         // the intro is skipped unless this is false
       "deploySummary": "...",     // see Peacock below; "off" to disable
       "known": [...]              // mod folders seen so far (managed by h3mod)
     }
@@ -57,7 +57,7 @@ HITMAN 3 folder, next to `mods/`. Relative paths are relative to the config.
     option <mod> <option> [on|off] select ("Group:Name" for choices)
     reset-options <mod>
     import-smf [config.json]       take load order and options from SMF
-    deploy [-skip-unsupported] [-out dir]
+    deploy [-skip-unsupported] [-skip-intro=false] [-out dir]
     undeploy
 
 `<mod>` is a number from `status`, a folder name, a mod ID, or any part of
@@ -93,7 +93,8 @@ and empty choice groups fall back to theirs; each change is reported.
 - manifest `dependencies`, `packagedefinition`, `thumbs`, and the standard
   ModJPFiles script, including its files for `Retail/mods` (h3mod tracks
   the files it places there and removes only those)
-- `skipIntro` in the config skips the intro
+- skipping the intro, on by default: `"skipIntro": false` in the config or
+  `deploy -skip-intro=false` keeps it
 
 - contracts added to the Destinations menu (`SMF.destinations`)
 - Peacock integration: modded unlockables and contracts, and `peacockPlugins`

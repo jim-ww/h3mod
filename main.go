@@ -38,7 +38,7 @@ options:
   reset-options <mod>          go back to the mod's defaults
 
 deploying:
-  deploy [-skip-unsupported] [-out dir]
+  deploy [-skip-unsupported] [-skip-intro=false] [-out dir]
   undeploy                     restore vanilla game files
   import-smf [config.json]     take load order and options from SMF
 
@@ -109,10 +109,13 @@ func run(ctx context.Context, args []string) error {
 		dfl := flag.NewFlagSet("deploy", flag.ContinueOnError)
 		skip := dfl.Bool("skip-unsupported", false, "deploy without features h3mod doesn't support")
 		out := dfl.String("out", "", "write output to this directory instead of the game")
+		intro := dfl.Bool("skip-intro", cfg.skipIntro(), "start at the main menu (default from the config's skipIntro, on if unset)")
 		if err := dfl.Parse(rest); err != nil {
 			return err
 		}
-		return newDeployer(cfg).Deploy(ctx, *skip, *out)
+		d := newDeployer(cfg)
+		d.skipIntro = *intro
+		return d.Deploy(ctx, *skip, *out)
 	case "undeploy":
 		return newDeployer(cfg).Undeploy()
 	}

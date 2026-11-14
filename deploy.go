@@ -27,16 +27,18 @@ var (
 // Deployer writes mods into the game. Base game archives are never written:
 // output is chunkNpatch300.rpkg files plus packagedefinition.txt.
 type Deployer struct {
-	cfg  *Config
-	game *gameData
-	log  func(format string, args ...any)
+	cfg       *Config
+	game      *gameData
+	log       func(format string, args ...any)
+	skipIntro bool // from the config unless the deploy flag says otherwise
 }
 
 func newDeployer(cfg *Config) *Deployer {
 	return &Deployer{
-		cfg:  cfg,
-		game: newGameData(cfg),
-		log:  func(format string, args ...any) { fmt.Printf(format+"\n", args...) },
+		cfg:       cfg,
+		game:      newGameData(cfg),
+		log:       func(format string, args ...any) { fmt.Printf(format+"\n", args...) },
+		skipIntro: cfg.skipIntro(),
 	}
 }
 
@@ -176,8 +178,8 @@ func (d *Deployer) Deploy(ctx context.Context, skipUnsupported bool, out string)
 		return err
 	}
 	if out == "" {
-		if d.cfg.SkipIntro || len(p.Thumbs) > 0 {
-			err = writeThumbs(d.cfg, d.cfg.SkipIntro, p.Thumbs)
+		if d.skipIntro || len(p.Thumbs) > 0 {
+			err = writeThumbs(d.cfg, d.skipIntro, p.Thumbs)
 		} else {
 			err = restoreThumbs(d.cfg)
 		}

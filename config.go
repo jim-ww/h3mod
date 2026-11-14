@@ -16,7 +16,8 @@ type Config struct {
 	Options map[string]*ModOptions `json:"options,omitempty"` // by mod folder
 	// SkipIntro starts the game at the main menu, like SMF's option; it
 	// changes Retail/thumbs.dat, which undeploy restores.
-	SkipIntro bool `json:"skipIntro,omitempty"`
+	// Unset means on.
+	SkipIntro *bool `json:"skipIntro,omitempty"`
 	// DeploySummary is where Peacock looks for SMF's deploy summary;
 	// empty means its default on Linux, "off" writes none.
 	DeploySummary string `json:"deploySummary,omitempty"`
@@ -45,6 +46,8 @@ func loadConfig(path string) (*Config, error) {
 	}
 	return c, nil
 }
+
+func (c *Config) skipIntro() bool { return c.SkipIntro == nil || *c.SkipIntro }
 
 func (c *Config) save() error {
 	b, err := json.MarshalIndent(c, "", "\t")

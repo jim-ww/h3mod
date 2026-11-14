@@ -80,3 +80,18 @@ func TestThumbsRoundTrip(t *testing.T) {
 		t.Fatal("bad clean copy kept")
 	}
 }
+
+func TestSkipIntroDefault(t *testing.T) {
+	dir := t.TempDir()
+	for body, want := range map[string]bool{`{}`: true, `{"skipIntro": true}`: true, `{"skipIntro": false}`: false} {
+		path := filepath.Join(dir, "h3mod.json")
+		os.WriteFile(path, []byte(body), 0o644)
+		cfg, err := loadConfig(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.skipIntro() != want {
+			t.Errorf("%s: skipIntro %v, want %v", body, cfg.skipIntro(), want)
+		}
+	}
+}
