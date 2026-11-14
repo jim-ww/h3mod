@@ -50,3 +50,24 @@ func TestSortLoadOrder(t *testing.T) {
 		})
 	}
 }
+
+func TestManifestProblems(t *testing.T) {
+	tests := []struct {
+		manifest string
+		want     int
+	}{
+		{`{"id":"a","name":"A","description":"","authors":["x"],"version":"1.0.0","frameworkVersion":"2.33.0"}`, 0},
+		{`{"id":"a","name":"A","version":"1.0.0","frameworkVersion":"2.0.0"}`, 2}, // no description, authors
+		{`{"id":"a","name":"A","description":"","authors":[],"version":"1","frameworkVersion":"3.0.0"}`, 1},
+		{`{"id":"a","name":"A","description":"","authors":[],"version":"1","frameworkVersion":"1.5.0"}`, 1},
+	}
+	for _, tt := range tests {
+		m, err := parseManifest([]byte(tt.manifest))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := m.problems(); len(got) != tt.want {
+			t.Errorf("%s: %v", tt.manifest, got)
+		}
+	}
+}

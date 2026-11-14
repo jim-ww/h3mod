@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/Masterminds/semver/v3"
 )
 
 // Mod is a folder in the mods directory: an SMF framework mod (manifest.json)
@@ -48,6 +50,10 @@ type Manifest struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
 	Version string `json:"version"`
+	// Checked like SMF does, see problems.
+	Description      *string  `json:"description"`
+	Authors          []string `json:"authors"`
+	FrameworkVersion string   `json:"frameworkVersion"`
 	// UpdateCheck is a URL serving {"version", "changelog", "url"}.
 	UpdateCheck string   `json:"updateCheck"`
 	Options     []Option `json:"options"`
@@ -87,6 +93,37 @@ type Option struct {
 	EnabledByDefault bool   `json:"enabledByDefault"`
 	Condition        string `json:"condition"`
 	ManifestContent
+}
+
+// smfVersion is the SMF release whose behaviour h3mod follows; manifests
+// state the SMF version they were made for.
+const smfVersion = "2.33.45"
+
+// problems lists what SMF warns about in a manifest: missing required fields
+// and a framework version it is likely incompatible with.
+func (m *Manifest) problems() []string {
+	var out []string
+	for _, f := range []struct {
+		name    string
+		missing bool
+	}{
+		{"id", m.ID == ""}, {"name", m.Name == ""}, {"description", m.Description == nil},
+		{"authors", m.Authors == nil}, {"version", m.Version == ""}, {"frameworkVersion", m.FrameworkVersion == ""},
+	} {
+		if f.missing {
+			out = append(out, fmt.Sprintf("manifest has no %q", f.name))
+		}
+	}
+	want := semver.MustParse(smfVersion)
+	if v, err := semver.NewVersion(m.FrameworkVersion); err == nil {
+		switch {
+		case v.GreaterThan(want):
+			out = append(out, fmt.Sprintf("made for a newer SMF (%s) and likely incompatible", v))
+		case v.Major() < want.Major():
+			out = append(out, fmt.Sprintf("made for an older SMF (%s) and likely incompatible", v))
+		}
+	}
+	return out
 }
 
 // Key identifies an option the way SMF stores it: "Group:Name" for select

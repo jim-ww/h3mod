@@ -146,6 +146,9 @@ func (p *Plan) checkRelations(m *Mod, selected []string, enabled map[string]bool
 	if m.Manifest == nil {
 		return
 	}
+	for _, pr := range m.Manifest.problems() {
+		p.Notes = append(p.Notes, m.Dir+": "+pr)
+	}
 	var platforms []string
 	for _, c := range m.Manifest.content(selected, p.condVars) {
 		for _, r := range c.Requirements {
