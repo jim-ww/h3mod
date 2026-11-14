@@ -54,21 +54,26 @@ func main() {
 	mods := fl.String("mods", "", "")
 	flagErr := fl.Parse(os.Args[1:])
 
+	if flagErr != nil {
+		code := 2
+		if errors.Is(flagErr, flag.ErrHelp) {
+			code = 0
+		}
+		if attachConsole() {
+			fmt.Fprint(os.Stderr, out.String())
+			os.Exit(code)
+		}
+		// no terminal at all (e.g. a Windows shortcut): show it in a window
+		a := app.NewWithID("io.github.jim-ww.h3mod")
+		w := a.NewWindow("h3mod-gui")
+		w.SetContent(container.NewPadded(widget.NewLabelWithStyle(out.String(), fyne.TextAlignLeading, fyne.TextStyle{Monospace: true})))
+		w.ShowAndRun()
+		os.Exit(code)
+	}
+
 	a := app.NewWithID("io.github.jim-ww.h3mod")
 	g := &gui{app: a, win: a.NewWindow("h3mod " + version), ctx: context.Background()}
 	g.win.Resize(fyne.NewSize(1000, 680))
-	if flagErr != nil {
-		// Windows GUI programs have no console, so the help goes in a window.
-		fmt.Fprint(os.Stderr, out.String())
-		g.win.SetContent(container.NewPadded(widget.NewLabelWithStyle(out.String(), fyne.TextAlignLeading, fyne.TextStyle{Monospace: true})))
-		g.win.Resize(fyne.NewSize(560, 200))
-		g.win.ShowAndRun()
-		if errors.Is(flagErr, flag.ErrHelp) {
-			return
-		}
-		os.Exit(2)
-	}
-
 	cfg, err := loadConfig(*cfgPath)
 	if err != nil {
 		g.win.SetContent(widget.NewLabel(err.Error()))

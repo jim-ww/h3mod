@@ -31,5 +31,6 @@ func syncDir(dir string) error {
 
 func hideWindow(*exec.Cmd) {}
 
-// attachConsole is a no-op: Unix programs always have their terminal.
-func attachConsole() {}
+// attachConsole reports that there is output to write to: Unix programs keep
+// their terminal (or wherever output was sent).
+func attachConsole() bool { return true }

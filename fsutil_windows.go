@@ -31,8 +31,8 @@ func hideWindow(cmd *exec.Cmd) {
 
 // attachConsole connects a GUI-subsystem program, which starts without a
 // console, to the terminal it was started from, so h3mod-gui can run CLI
-// commands there.
-func attachConsole() {
+// commands there. It reports whether there is output to write to.
+func attachConsole() bool {
 	// Handles the caller redirected (pipes, files, shell completion) work
 	// already; only missing ones go to the parent's console.
 	missing := func(f *os.File) bool {
@@ -40,12 +40,12 @@ func attachConsole() {
 		return h == 0 || h == windows.InvalidHandle
 	}
 	if !missing(os.Stdout) && !missing(os.Stderr) && !missing(os.Stdin) {
-		return
+		return true
 	}
 	const attachParentProcess = ^uint32(0)
 	attach := windows.NewLazySystemDLL("kernel32.dll").NewProc("AttachConsole")
 	if r, _, _ := attach.Call(uintptr(attachParentProcess)); r == 0 {
-		return // started without a terminal
+		return !missing(os.Stderr) // started without a terminal
 	}
 	reopened := false
 	for _, f := range []struct {
@@ -66,4 +66,5 @@ func attachConsole() {
 		// The shell doesn't wait for GUI programs and has printed its prompt.
 		os.Stdout.WriteString("\n")
 	}
+	return !missing(os.Stderr)
 }
