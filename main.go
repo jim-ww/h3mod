@@ -128,6 +128,9 @@ func status(cfg *Config) error {
 	}
 	available := map[string]string{} // mod folder -> newer version
 	if cfg.CheckUpdates {
+		if rel, newer, err := checkSelfUpdate(context.Background()); err == nil && newer {
+			fmt.Printf("h3mod %s is available (h3mod self-update)\n", rel.Version)
+		}
 		for _, f := range findUpdates(context.Background(), mods, func(string, ...any) {}) {
 			available[f.m.Dir] = f.u.Version
 		}
@@ -303,7 +306,31 @@ func installCmd(ctx context.Context, cfg *Config, src, rpkgName string, replace 
 	return errors.Join(err, syncMods(cfg))
 }
 
+// selfUpdateCmd updates h3mod after showing what changed and asking.
+func selfUpdateCmd(ctx context.Context, yes bool) error {
+	rel, newer, err := checkSelfUpdate(ctx)
+	if err != nil {
+		return err
+	}
+	if !newer {
+		fmt.Printf("h3mod %s is the latest\n", version)
+		return nil
+	}
+	fmt.Printf("h3mod %s -> %s\n", version, rel.Version)
+	printIndented(rel.Notes)
+	if err := selfUpdatable(); err != nil {
+		return err
+	}
+	if !yes && !confirm(fmt.Sprintf("Update h3mod to %s?", rel.Version)) {
+		return nil
+	}
+	return applySelfUpdate(ctx, rel, func(f string, a ...any) { fmt.Printf(f+"\n", a...) })
+}
+
 func updatesCmd(ctx context.Context, cfg *Config) error {
+	if rel, newer, err := checkSelfUpdate(ctx); err == nil && newer {
+		fmt.Printf("h3mod %s is available (h3mod self-update)\n", rel.Version)
+	}
 	mods, err := discoverMods(cfg.abs(cfg.Mods))
 	if err != nil {
 		return err

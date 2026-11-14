@@ -21,6 +21,7 @@ var defaultConfig = configPath()
 
 // cliMain runs a command line; h3mod-gui uses it too when given a command.
 func cliMain(name string) {
+	finishSelfUpdate()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := newRootCmd(name).ExecuteContext(ctx); err != nil {
@@ -55,7 +56,7 @@ type cli struct {
 // Commands without the config setup (it may ask about SMF and saves), and
 // commands whose runs aren't worth logging.
 var (
-	noSetup  = []string{"help", "version", "completion", "bash", "zsh", "fish", "powershell", "__complete", "__completeNoDesc"}
+	noSetup  = []string{"help", "version", "self-update", "completion", "bash", "zsh", "fish", "powershell", "__complete", "__completeNoDesc"}
 	readOnly = []string{"status", "options", "updates"}
 )
 
@@ -173,6 +174,16 @@ ones drop out of the load order.`,
 	}
 	remove.Flags().BoolVarP(&yes, "yes", "y", false, "don't ask")
 	add("mods", remove)
+	var selfYes bool
+	selfUpdate := &cobra.Command{
+		Use:     "self-update",
+		Aliases: []string{"upgrade"},
+		Short:   "Update h3mod itself to the latest release",
+		Args:    cobra.NoArgs,
+		RunE:    func(cmd *cobra.Command, _ []string) error { return selfUpdateCmd(cmd.Context(), selfYes) },
+	}
+	selfUpdate.Flags().BoolVarP(&selfYes, "yes", "y", false, "don't ask")
+	root.AddCommand(selfUpdate)
 	add("mods", &cobra.Command{
 		Use:   "updates",
 		Short: "Check mods' update URLs for new versions, with release notes",

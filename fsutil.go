@@ -10,7 +10,16 @@ import (
 // lockGame takes an exclusive lock for changing game files, so two h3mod
 // processes never deploy at once. The lock lives as long as the process.
 func lockGame(cfg *Config) (unlock func(), err error) {
-	path := cfg.abs("h3mod.lock")
+	unlock, err = lockFileAt(cfg.abs("h3mod.lock"))
+	if errors.Is(err, errLocked) {
+		return nil, fmt.Errorf("another h3mod is deploying (%s is locked)", cfg.abs("h3mod.lock"))
+	}
+	return unlock, err
+}
+
+// lockFileAt takes an exclusive lock on a file for as long as the process
+// runs or until unlock.
+func lockFileAt(path string) (unlock func(), err error) {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
 		return nil, err
@@ -18,7 +27,7 @@ func lockGame(cfg *Config) (unlock func(), err error) {
 	if err := lockFile(f); err != nil {
 		f.Close()
 		if errors.Is(err, errLocked) {
-			return nil, fmt.Errorf("another h3mod is deploying (%s is locked)", path)
+			return nil, fmt.Errorf("%s is locked by another h3mod: %w", path, errLocked)
 		}
 		return nil, err
 	}

@@ -1,8 +1,10 @@
 package main
 
 import (
+	"archive/tar"
 	"archive/zip"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -34,8 +36,10 @@ func extractArchive(ctx context.Context, src, dst string) error {
 		err = extract7z(ctx, src, dst)
 	case bytes.HasPrefix(magic, []byte("Rar!\x1a\x07")):
 		err = extractRar(ctx, src, dst)
+	case bytes.HasPrefix(magic, []byte("\x1f\x8b")):
+		err = extractTarGz(ctx, src, dst)
 	default:
-		return fmt.Errorf("%s is not a zip, 7z or rar archive", filepath.Base(src))
+		return fmt.Errorf("%s is not a zip, 7z, rar or tar.gz archive", filepath.Base(src))
 	}
 	if err != nil {
 		return fmt.Errorf("extracting %s: %w", filepath.Base(src), err)
@@ -92,7 +96,34 @@ func extractRar(ctx context.Context, src, dst string) error {
 	}
 }
 
-// writeEntry writes one archive entry under dst.
+func extractTarGz(ctx context.Context, src, dst string) error {
+	f, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return err
+	}
+	r := tar.NewReader(gz)
+	for {
+		h, err := r.Next()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		open := func() (io.ReadCloser, error) { return io.NopCloser(r), nil }
+		if err := writeEntry(ctx, dst, h.Name, h.FileInfo().Mode(), open); err != nil {
+			return err
+		}
+	}
+}
+
+// writeEntry writes one archive entry under dst, keeping the executable
+// bit (tar archives carry it).
 func writeEntry(ctx context.Context, dst, name string, mode fs.FileMode, open func() (io.ReadCloser, error)) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -116,7 +147,11 @@ func writeEntry(ctx context.Context, dst, name string, mode fs.FileMode, open fu
 		return err
 	}
 	defer in.Close()
-	out, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	perm := os.FileMode(0o644)
+	if mode&0o111 != 0 {
+		perm = 0o755
+	}
+	out, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, perm)
 	if err != nil {
 		return err
 	}

@@ -234,6 +234,7 @@
         gzip -9 < ${path-list}/hash_list.txt > ${d}/data/hash_list.txt.gz
         cp ${./README.md} ${d}/README.md
         cp ${./LICENSE} ${d}/LICENSE
+        echo ${version} > ${d}/release.txt
       '';
     in
     {

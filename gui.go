@@ -11,6 +11,7 @@ import (
 	"image/color"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -40,6 +41,7 @@ const guiUsage = `usage: h3mod-gui [--config h3mod.json] [--game dir] [--mods di
 `
 
 func main() {
+	finishSelfUpdate()
 	if hasCommand(os.Args[1:]) {
 		attachConsole()
 		cliMain("h3mod-gui")
@@ -844,11 +846,22 @@ func (g *gui) install(path string) {
 // everything is up to date.
 func (g *gui) checkUpdates(manual bool) {
 	var found []foundUpdate
+	var self *selfRelease
 	work := func() error {
+		if rel, newer, err := checkSelfUpdate(g.ctx); err != nil {
+			if manual {
+				g.logf("h3mod: %v", err)
+			}
+		} else if newer {
+			self = rel
+		}
 		found = findUpdates(g.ctx, g.mods, g.logf)
 		return nil
 	}
 	done := func(error) {
+		if self != nil {
+			g.offerSelfUpdate(self)
+		}
 		g.updates = map[string]foundUpdate{}
 		for _, f := range found {
 			g.updates[f.m.Dir] = f
@@ -871,6 +884,42 @@ func (g *gui) checkUpdates(manual bool) {
 		work()
 		fyne.Do(func() { done(nil) })
 	}()
+}
+
+// offerSelfUpdate asks to update h3mod, then to restart it.
+func (g *gui) offerSelfUpdate(rel *selfRelease) {
+	if err := selfUpdatable(); err != nil {
+		g.logf("h3mod %s is available: %v", rel.Version, err)
+		return
+	}
+	notes := widget.NewLabel(fmt.Sprintf("h3mod %s → %s\n\n%s", version, rel.Version, rel.Notes))
+	notes.Wrapping = fyne.TextWrapWord
+	scroll := container.NewVScroll(notes)
+	scroll.SetMinSize(fyne.NewSize(600, 300))
+	dialog.ShowCustomConfirm("h3mod update", "Update", "Later", scroll, func(ok bool) {
+		if !ok {
+			return
+		}
+		g.busy(false, func() error {
+			return applySelfUpdate(g.ctx, rel, g.logf)
+		}, func(err error) {
+			if err != nil {
+				g.showError(err)
+				return
+			}
+			dialog.ShowConfirm("h3mod updated", "Restart h3mod now?", func(ok bool) {
+				if !ok {
+					return
+				}
+				exe := filepath.Join(exeDir(), filepath.Base(os.Args[0]))
+				if err := exec.Command(exe, os.Args[1:]...).Start(); err != nil {
+					g.showError(err)
+					return
+				}
+				g.app.Quit()
+			}, g.win)
+		})
+	}, g.win)
 }
 
 func (g *gui) offerUpdates(found []foundUpdate) {
