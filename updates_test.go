@@ -36,3 +36,33 @@ func TestCheckUpdate(t *testing.T) {
 		}
 	}
 }
+
+func TestReleaseNotes(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/repos/a/b/releases" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Write([]byte(`[
+			{"tag_name": "1.2.0", "body": "## Fixes\r\n- fix two\r\n[install](https://hitman-resources.netlify.app/smf-install-link/x)"},
+			{"tag_name": "1.1.0", "body": "intro\n## Fixes\n- fix one\n## Features\n- feature"},
+			{"tag_name": "1.0.0", "body": "## Fixes\n- old"}
+		]`))
+	}))
+	defer srv.Close()
+	githubAPI = srv.URL
+	defer func() { githubAPI = "https://api.github.com" }()
+	m := &Mod{Manifest: &Manifest{Version: "1.0.0", UpdateCheck: "https://github.com/a/b/releases/latest/download/updates.json"}}
+	got, err := releaseNotes(t.Context(), m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "intro\n## Fixes\n- fix one\n- fix two\n## Features\n- feature"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	m.Manifest.UpdateCheck = "https://example.com/updates.json"
+	if got, _ := releaseNotes(t.Context(), m); got != "" {
+		t.Errorf("non-GitHub mod: %q", got)
+	}
+}

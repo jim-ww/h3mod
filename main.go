@@ -245,13 +245,19 @@ func updatesCmd(ctx context.Context, cfg *Config) error {
 			fmt.Printf("%s: %v\n", m.Dir, err)
 		case newer:
 			fmt.Printf("%s: %s -> %s\n", m.Dir, m.Manifest.Version, u.Version)
-			for line := range strings.SplitSeq(strings.TrimSpace(u.Changelog), "\n") {
-				fmt.Println("    " + line)
-			}
+			printIndented(changelog(ctx, m, u))
+		default:
+			fmt.Printf("%s: %s is the latest\n", m.Dir, m.Manifest.Version)
 		}
 	}
 	fmt.Printf("checked %d of %d mods (others have no update URL)\n", checked, len(mods))
 	return nil
+}
+
+func printIndented(s string) {
+	for line := range strings.SplitSeq(s, "\n") {
+		fmt.Println("    " + line)
+	}
 }
 
 func updateCmd(ctx context.Context, cfg *Config, names []string) error {
@@ -288,6 +294,7 @@ func updateCmd(ctx context.Context, cfg *Config, names []string) error {
 			return fmt.Errorf("%s: %w", m.Dir, err)
 		}
 		fmt.Printf("%s: updated %s -> %s\n", m.Dir, m.Manifest.Version, u.Version)
+		printIndented(changelog(ctx, m, u))
 	}
 	return nil
 }

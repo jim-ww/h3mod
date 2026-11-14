@@ -51,7 +51,7 @@ HITMAN 3 folder, next to `mods/`. Relative paths are relative to the config.
     enable <mod>... | all / disable <mod>... | all
     move <mod> <position>
     install [-name n] [-replace] <archive|rpkg>
-    updates                        check mods' update URLs
+    updates                        check mods' update URLs, with release notes
     update <mod>...                download and install new versions
     options <mod>                  list options and what is selected
     option <mod> <option> [on|off] select ("Group:Name" for choices)
