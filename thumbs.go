@@ -55,21 +55,45 @@ func (cfg *Config) thumbsPath() string {
 
 func (cfg *Config) thumbsBase() string { return cfg.abs(filepath.Join("clean", "thumbs.dat")) }
 
-// writeThumbs patches thumbs.dat from its base: the file as it was before
-// h3mod first changed it, which may already carry other tools' changes.
+// cleanThumbs returns thumbs.dat as it was before h3mod (or SMF) changed it,
+// which may carry other tools' lines. A copy that skips the intro isn't
+// clean: the first candidate that still boots into Boot.entity is used and
+// kept in clean/.
+func cleanThumbs(cfg *Config) ([]byte, error) {
+	candidates := []string{
+		cfg.thumbsBase(),
+		filepath.Join(cfg.abs(cfg.Game), "SMF", "cleanThumbs.dat"),
+		cfg.thumbsPath(),
+	}
+	for i, p := range candidates {
+		b, err := os.ReadFile(p)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		plain, err := decryptPD(b)
+		if err != nil || !bytes.Contains(plain, []byte("Boot.entity")) {
+			continue
+		}
+		if i > 0 {
+			if err := os.MkdirAll(filepath.Dir(cfg.thumbsBase()), 0o755); err != nil {
+				return nil, err
+			}
+			if err := writeFileAtomic(cfg.thumbsBase(), b); err != nil {
+				return nil, err
+			}
+		}
+		return b, nil
+	}
+	return nil, errors.New("no unmodified thumbs.dat found (one that starts in Boot.entity); verify the game files in Steam")
+}
+
+// writeThumbs patches the clean thumbs.dat.
 func writeThumbs(cfg *Config, skipIntro bool, lines []string) error {
-	base, err := os.ReadFile(cfg.thumbsBase())
-	if errors.Is(err, fs.ErrNotExist) {
-		if base, err = os.ReadFile(cfg.thumbsPath()); err != nil {
-			return err
-		}
-		if err := os.MkdirAll(filepath.Dir(cfg.thumbsBase()), 0o755); err != nil {
-			return err
-		}
-		if err := writeFileAtomic(cfg.thumbsBase(), base); err != nil {
-			return err
-		}
-	} else if err != nil {
+	base, err := cleanThumbs(cfg)
+	if err != nil {
 		return err
 	}
 	plain, err := decryptPD(base)
@@ -90,14 +114,14 @@ func writeThumbs(cfg *Config, skipIntro bool, lines []string) error {
 	return writeFileAtomic(cfg.thumbsPath(), encryptPD(plain))
 }
 
-// restoreThumbs puts back thumbs.dat as it was before h3mod changed it.
+// restoreThumbs puts back the clean thumbs.dat.
 func restoreThumbs(cfg *Config) error {
-	base, err := os.ReadFile(cfg.thumbsBase())
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil // never changed
-	}
+	base, err := cleanThumbs(cfg)
 	if err != nil {
 		return err
+	}
+	if cur, err := os.ReadFile(cfg.thumbsPath()); err == nil && bytes.Equal(cur, base) {
+		return nil
 	}
 	return writeFileAtomic(cfg.thumbsPath(), base)
 }

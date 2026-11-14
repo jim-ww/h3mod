@@ -63,4 +63,20 @@ func TestThumbsRoundTrip(t *testing.T) {
 	if b, _ := os.ReadFile(thumbs); !bytes.Equal(b, orig) {
 		t.Fatal("restore did not bring back the original")
 	}
+
+	// A clean copy that skips the intro is replaced by SMF's.
+	skipped := encryptPD([]byte("SCENE_FILE=assembly:/_PRO/Scenes/Frontend/MainMenu.entity\n[Hitman5]\n"))
+	os.WriteFile(cfg.thumbsBase(), skipped, 0o644)
+	os.WriteFile(thumbs, skipped, 0o644)
+	os.MkdirAll(filepath.Join(game, "SMF"), 0o755)
+	os.WriteFile(filepath.Join(game, "SMF", "cleanThumbs.dat"), orig, 0o644)
+	if err := restoreThumbs(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(thumbs); !bytes.Equal(b, orig) {
+		t.Fatal("restored a thumbs.dat that skips the intro")
+	}
+	if b, _ := os.ReadFile(cfg.thumbsBase()); !bytes.Equal(b, orig) {
+		t.Fatal("bad clean copy kept")
+	}
 }
