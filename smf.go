@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -13,9 +14,20 @@ import (
 type smfConfig struct {
 	LoadOrder  []string            `json:"loadOrder"`
 	ModOptions map[string][]string `json:"modOptions"`
+	SkipIntro  *bool               `json:"skipIntro"`
 }
 
-// importSMF replaces load order and options with those of an SMF config.
+// smfDir is SMF's folder: the config's "smf", or SMF in the game folder.
+func (c *Config) smfDir() string {
+	if c.SMF != "" {
+		return c.abs(c.SMF)
+	}
+	return filepath.Join(c.abs(c.Game), "SMF")
+}
+
+// importSMF replaces load order, options and the intro setting with those
+// of an SMF config. When h3mod has no deploy recorded but the game has SMF's
+// mod archives, SMF's setup is recorded as what's deployed.
 func importSMF(cfg *Config, path string) ([]string, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -56,7 +68,43 @@ func importSMF(cfg *Config, path string) ([]string, error) {
 		}
 		cfg.saveSelection(m, sel)
 	}
+	if sc.SkipIntro != nil {
+		cfg.SkipIntro = sc.SkipIntro
+	}
+	// SMF decided about every mod, so none is new to enable
+	cfg.Known = nil
+	for _, m := range mods {
+		cfg.Known = append(cfg.Known, m.Dir)
+	}
+	st, err := loadState(cfg.abs("state.json"))
+	if err != nil {
+		return nil, err
+	}
+	if st.Deployed.IsZero() && hasModArchives(cfg.runtimeDir()) {
+		st.recordDeploy(cfg, mods, cfg.skipIntro())
+		if err := st.save(cfg.abs("state.json")); err != nil {
+			return nil, err
+		}
+		notes = append(notes, fmt.Sprintf("the game has SMF's deploy: recorded its %d mods as deployed", len(cfg.Enabled)))
+	}
 	return notes, nil
+}
+
+// hasModArchives reports whether a Runtime folder has mod archives (patch
+// numbers SMF and h3mod write).
+func hasModArchives(runtime string) bool {
+	ents, err := os.ReadDir(runtime)
+	if err != nil {
+		return false
+	}
+	for _, e := range ents {
+		if m := archiveName.FindStringSubmatch(e.Name()); m != nil && m[2] != "" {
+			if n, _ := strconv.Atoi(m[2]); n >= managedPatchMin && n <= outputPatch {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // findMod matches a folder name or mod ID, case-insensitively.
@@ -126,7 +174,7 @@ func isIdentStart(c byte) bool {
 // smfMods returns SMF's mods folder when it's worth offering on a first run:
 // the config is new and the game folder has an SMF install with mods.
 func (c *Config) smfMods() string {
-	dir := filepath.Join(c.abs(c.Game), "SMF", "Mods")
+	dir := filepath.Join(c.smfDir(), "Mods")
 	if !c.fresh || c.abs(c.Mods) == dir {
 		return ""
 	}

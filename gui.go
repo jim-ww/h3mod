@@ -156,6 +156,7 @@ func (g *gui) build() {
 	g.details = container.NewVBox(widget.NewLabel("Select a mod to see its options."))
 
 	install := widget.NewButtonWithIcon("Install mod…", theme.ContentAddIcon(), g.pickInstall)
+	importSMF := widget.NewButtonWithIcon("Import from SMF…", theme.FolderOpenIcon(), g.importSMF)
 	updates := widget.NewButtonWithIcon("Check for updates", theme.DownloadIcon(), func() { g.checkUpdates(true) })
 	autoUpdates := widget.NewCheck("Check on start", nil)
 	autoUpdates.Checked = g.cfg.CheckUpdates
@@ -173,13 +174,13 @@ func (g *gui) build() {
 		g.saveConfig()
 		g.refreshState()
 	}
-	g.actions = []fyne.Disableable{install, updates, deploy, undeploy}
+	g.actions = []fyne.Disableable{install, importSMF, updates, deploy, undeploy}
 
 	folders := container.New(layout.NewFormLayout(),
 		widget.NewLabel("Game:"), container.NewBorder(nil, nil, nil, widget.NewButton("Change…", g.pickGame), g.gameLabel),
 		widget.NewLabel("Mods:"), container.NewBorder(nil, nil, nil, widget.NewButton("Change…", g.pickMods), g.modsLabel),
 	)
-	top := container.NewVBox(folders, container.NewHBox(install, updates, autoUpdates, layout.NewSpacer(), skipIntro))
+	top := container.NewVBox(folders, container.NewHBox(install, importSMF, updates, autoUpdates, layout.NewSpacer(), skipIntro))
 
 	g.logText = widget.NewLabel("Drop mod archives on this window to install them. Drag mods to change the load order.")
 	g.logText.Wrapping = fyne.TextWrapWord
@@ -635,6 +636,52 @@ func (g *gui) remove(m *Mod) {
 			g.showError(err)
 		}
 		g.sel = nil
+		g.reload()
+	}, g.win)
+}
+
+// importSMF takes load order, options and the intro setting from SMF,
+// asking for SMF's folder when it isn't in the game folder.
+func (g *gui) importSMF() {
+	smfConfig := filepath.Join(g.cfg.smfDir(), "config.json")
+	if _, err := os.Stat(smfConfig); err != nil {
+		dialog.ShowFolderOpen(func(u fyne.ListableURI, err error) {
+			if err != nil || u == nil {
+				return
+			}
+			if _, err := os.Stat(filepath.Join(u.Path(), "config.json")); err != nil {
+				g.showError(fmt.Errorf("%s has no config.json: not an SMF folder", u.Path()))
+				return
+			}
+			g.cfg.SMF = u.Path()
+			g.saveConfig()
+			g.importSMF()
+		}, g.win)
+		return
+	}
+	smfMods := filepath.Join(g.cfg.smfDir(), "Mods")
+	useMods := widget.NewCheck("Also use SMF's mods folder ("+smfMods+")", nil)
+	useMods.Checked = g.cfg.abs(g.cfg.Mods) == smfMods
+	msg := widget.NewLabel("Take the load order, options and intro setting from SMF?\nThis replaces h3mod's.")
+	content := container.NewVBox(msg, useMods)
+	dialog.ShowCustomConfirm("Import from SMF", "Import", "Cancel", content, func(ok bool) {
+		if !ok {
+			return
+		}
+		if useMods.Checked {
+			g.cfg.Mods = smfMods
+			g.updateFolders()
+		}
+		notes, err := importSMF(g.cfg, smfConfig)
+		for _, n := range notes {
+			g.logf("%s", n)
+		}
+		if err != nil {
+			g.showError(err)
+			return
+		}
+		g.logf("imported %d enabled mods from %s", len(g.cfg.Enabled), smfConfig)
+		g.saveConfig()
 		g.reload()
 	}, g.win)
 }

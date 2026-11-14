@@ -95,8 +95,10 @@ From the folder the release was unpacked to (inside the HITMAN 3 folder):
 On Windows run `.\h3mod.exe` the same way.
 
 On the first run, both ask whether to use SMF's mods folder (with its load
-order and options) when the game folder has one. Later, set `"mods"` in
-`h3mod.json` and run `h3mod import-smf`, or use **Mods: Change…** in the GUI.
+order and options) when the game folder has one. Later, `h3mod import-smf`
+or **Import from SMF…** in the GUI takes them again, optionally switching to
+SMF's mods folder. When h3mod hasn't deployed yet but SMF has, SMF's setup is
+recorded as deployed. SMF elsewhere: `--smf dir` (saved to the config).
 
 Errors name the mod and the file in it. Runs that change something are logged
 to `h3mod.log` next to the config.
@@ -113,7 +115,8 @@ to `h3mod.log` next to the config.
     options <mod>                  list options and what is selected
     option <mod> <option> [on|off] select ("Group:Name" for choices)
     reset-options <mod>
-    import-smf [config.json]       take load order and options from SMF
+    import-smf [--smf dir] [--use-smf-mods] [config.json]
+                                   take load order, options and intro setting from SMF (again)
     deploy [--skip-unsupported] [--skip-intro=false] [-o dir]
     undeploy
     help [command], version, completion <shell>
@@ -168,6 +171,7 @@ caches in `~/.cache/h3mod`.
       "enabled": ["Mod A", ...],  // folder names, in load order; later wins
       "options": {...},           // chosen options per mod
       "skipIntro": false,         // the intro is skipped unless this is false
+      "smf": "../SMF",            // SMF's folder for importing (default: SMF in the game folder)
       "checkUpdates": true,       // check mods for updates in status and on GUI start (off by default)
       "deploySummary": "...",     // see Peacock below; "off" to disable
       "known": [...]              // mod folders seen so far (managed by h3mod)

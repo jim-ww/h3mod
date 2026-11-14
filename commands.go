@@ -188,13 +188,22 @@ ones drop out of the load order.`,
 		}),
 		RunE: func(cmd *cobra.Command, args []string) error { return updateCmd(cmd.Context(), c.cfg, args) },
 	})
-	add("mods", &cobra.Command{
+	var smfDir string
+	var useSMFMods bool
+	importSMF := &cobra.Command{
 		Use:               "import-smf [config.json]",
-		Short:             "Take load order and options from SMF",
+		Short:             "Take load order, options and the intro setting from SMF (again)",
+		Long:              "Take load order, options and the intro setting from SMF's config.json, from SMF's folder (--smf, saved; default: SMF in the game folder) or the given file. When h3mod has no deploy recorded and the game has SMF's deploy, SMF's setup is recorded as deployed.",
 		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: fileExt("json"),
-		RunE:              func(_ *cobra.Command, args []string) error { return importSMFCmd(c.cfg, args) },
-	})
+		RunE: func(_ *cobra.Command, args []string) error {
+			return importSMFCmd(c.cfg, args, smfDir, useSMFMods)
+		},
+	}
+	importSMF.Flags().StringVar(&smfDir, "smf", "", "SMF's folder; saved to the config")
+	importSMF.Flags().BoolVar(&useSMFMods, "use-smf-mods", false, "also use SMF's mods folder")
+	importSMF.MarkFlagDirname("smf")
+	add("mods", importSMF)
 
 	add("options", &cobra.Command{
 		Use:               "options [mod]",

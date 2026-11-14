@@ -21,6 +21,9 @@ type Config struct {
 	// DeploySummary is where Peacock looks for SMF's deploy summary;
 	// empty means its default on Linux, "off" writes none.
 	DeploySummary string `json:"deploySummary,omitempty"`
+	// SMF is Simple Mod Framework's folder for importing; empty means SMF
+	// in the game folder.
+	SMF string `json:"smf,omitempty"`
 	// CheckUpdates checks mods' update URLs on start (GUI) and in status.
 	CheckUpdates bool `json:"checkUpdates,omitempty"`
 	// Known are the mod folders seen so far; any other folder is new and

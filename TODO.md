@@ -1,4 +1,3 @@
 - add simple install/uninstall (or enable/disable toggle) for ZHM mod manager
 - instead of shipping tools together with binary, embed in binary itself? and separate gui , cli releases
 - remove 7z dependency? e.g. use go stdlib
-- add way to import options AND deploy state (once again) from SMF. store/ability to specify path to SMF dir somewhere?

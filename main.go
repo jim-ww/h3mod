@@ -469,8 +469,19 @@ func resetOptions(cfg *Config, mod string) error {
 	return cfg.save()
 }
 
-func importSMFCmd(cfg *Config, args []string) error {
-	path := filepath.Join(cfg.abs(cfg.Game), "SMF", "config.json")
+func importSMFCmd(cfg *Config, args []string, smfDir string, useMods bool) error {
+	if smfDir != "" {
+		abs, err := filepath.Abs(smfDir)
+		if err != nil {
+			return err
+		}
+		cfg.SMF = abs
+	}
+	if useMods {
+		cfg.Mods = filepath.Join(cfg.smfDir(), "Mods")
+		fmt.Println("mods:", cfg.Mods)
+	}
+	path := filepath.Join(cfg.smfDir(), "config.json")
 	if len(args) > 0 {
 		path = args[0]
 	}
