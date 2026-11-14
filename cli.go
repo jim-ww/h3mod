@@ -15,6 +15,8 @@ func main() {
 	defer stop()
 	if err := run(ctx, os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
+		logLine("error: %v", err)
 		os.Exit(1)
 	}
+	logLine("done")
 }

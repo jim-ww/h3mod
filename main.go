@@ -81,6 +81,11 @@ func run(ctx context.Context, args []string) error {
 			return err
 		}
 	}
+	switch cmd {
+	case "status", "options", "help", "version", "updates":
+	default: // commands that change something
+		openRunLog(cfg, fmt.Sprintf("h3mod %s: %s", version, strings.Join(args, " ")))
+	}
 	if err := syncMods(cfg); err != nil {
 		return err
 	}
@@ -155,6 +160,7 @@ func syncMods(cfg *Config) error {
 	_, notes, err := cfg.syncMods()
 	for _, n := range notes {
 		fmt.Println("note:", n)
+		logLine("note: %s", n)
 	}
 	return err
 }

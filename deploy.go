@@ -45,9 +45,12 @@ func (d *Deployer) step(step string, done, total int) {
 
 func newDeployer(cfg *Config) *Deployer {
 	return &Deployer{
-		cfg:       cfg,
-		game:      newGameData(cfg),
-		log:       func(format string, args ...any) { fmt.Printf(format+"\n", args...) },
+		cfg:  cfg,
+		game: newGameData(cfg),
+		log: func(format string, args ...any) {
+			fmt.Printf(format+"\n", args...)
+			logLine(format, args...)
+		},
 		skipIntro: cfg.skipIntro(),
 	}
 }
