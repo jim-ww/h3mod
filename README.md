@@ -25,7 +25,8 @@ are in PATH.
 
 ### With nix
 
-The external tools (ResourceTool, quickentity-rs, xdelta3, 7-Zip) and the hash lists
+The external tools (ResourceTool, quickentity-rs 3.1 and 3.0, xdelta3, 7-Zip),
+SMF's legacy QuickEntity scripts and the hash lists
 come from the flake:
 
     nix run . -- status            # packaged binary
@@ -85,7 +86,11 @@ and empty choice groups fall back to theirs; each change is reported.
   options, requirements, incompatibilities, supported platforms and load
   order rules
 - raw files with `.meta` or `.meta.json`, rpkg mods
-- `repository.json`, `entity.json`, `entity.patch.json`, `material.json`,
+- `entity.json` and `entity.patch.json` of any QuickEntity version: older
+  ones (before 3.1 / patch version 6) are upgraded into the cache like SMF
+  does, with SMF's JavaScript QuickEntity 1.136–2.1 (run by an embedded
+  JavaScript engine) and QuickEntity 3.0; mod files are never changed
+- `repository.json`, `material.json`,
   `texture.tga`, `.delta`, `sfx.wem`
 - `unlockables.json`, `contract.json`, `JSON.patch.json`, blobs folders
 - `dlge.json`, `locr.json`, `ditl.json`, `clng.json`, `rtlv.json`, manifest

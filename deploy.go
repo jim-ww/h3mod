@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -241,6 +242,9 @@ func (d *Deployer) buildEntities(ctx context.Context, p *Plan) error {
 		workDir:  d.cfg.abs(filepath.Join("cache", "work")),
 	}
 	start := time.Now()
+	if err := d.upgradeLegacy(ctx, p.Entities, tools, idx, pathList); err != nil {
+		return err
+	}
 	results, err := er.runAll(ctx, p.Entities)
 	if err != nil {
 		return err
@@ -250,6 +254,89 @@ func (d *Deployer) buildEntities(ctx context.Context, p *Plan) error {
 		p.put(j.chunk, results[i][1])
 	}
 	d.log("entities: %d in %s", len(p.Entities), time.Since(start).Round(time.Millisecond))
+	return nil
+}
+
+// upgradeLegacy replaces entity.json and entity.patch.json files made for
+// QuickEntity before 3.1 with upgraded copies in the cache.
+func (d *Deployer) upgradeLegacy(ctx context.Context, jobs []*entityJob, tools Tools, idx *Index, pathList string) error {
+	u := &legacyUpgrader{
+		tools:    tools,
+		cacheDir: d.cfg.abs(filepath.Join("cache", "legacy")),
+		workDir:  d.cfg.abs(filepath.Join("cache", "work")),
+	}
+	var needJS, needQN3 bool
+	for _, j := range jobs {
+		if j.qn != "" && j.qnVersion < 3.1 {
+			needJS, needQN3 = needJS || legacyForEntity(j.qnVersion).script != "", needQN3 || legacyForEntity(j.qnVersion).script == ""
+		}
+		for _, p := range j.patches {
+			if p.version < 6 {
+				needJS, needQN3 = needJS || legacyForPatch(p.version).script != "", needQN3 || legacyForPatch(p.version).script == ""
+			}
+		}
+	}
+	if !needJS && !needQN3 {
+		return nil
+	}
+	var err error
+	if needQN3 {
+		if u.qn3, err = toolPath("quickentity-3"); err != nil {
+			return fmt.Errorf("upgrading QuickEntity 3.0 entities: %w", err)
+		}
+	}
+	if needJS {
+		if u.jsDir, err = dataFile(d.cfg, "H3MOD_LEGACY_QN", "legacy-quickentity"); err != nil {
+			return fmt.Errorf("upgrading old QuickEntity entities: %w", err)
+		}
+	}
+	// Reference names for the game entities old patches apply to, resolved
+	// only if some upgrade isn't cached.
+	names := sync.OnceValues(func() (map[uint64]string, error) {
+		want := map[uint64]bool{}
+		for _, j := range jobs {
+			for _, h := range []uint64{j.temp, j.tblu} {
+				if r, err := idx.lookup(h); err == nil {
+					for _, ref := range r.Refs {
+						want[ref.Hash] = true
+					}
+				}
+			}
+		}
+		return resolvePaths(pathList, want)
+	})
+	n := 0
+	for _, j := range jobs {
+		if j.qn != "" && j.qnVersion < 3.1 {
+			up, err := u.entity(ctx, j.qn, j.qnVersion)
+			if err != nil {
+				return fmt.Errorf("upgrading %s: %w", j.qn, err)
+			}
+			j.qn, j.qnVersion = up, 3.1
+			n++
+		}
+		for i, p := range j.patches {
+			if p.version >= 6 {
+				continue
+			}
+			// like SMF, against the game's version of the entity
+			temp, err := idx.lookup(j.temp)
+			if err != nil {
+				return err
+			}
+			tblu, err := idx.lookup(j.tblu)
+			if err != nil {
+				return err
+			}
+			up, err := u.patchCached(ctx, p.path, p.version, temp, tblu, names)
+			if err != nil {
+				return fmt.Errorf("upgrading %s: %w", p.path, err)
+			}
+			j.patches[i] = entityPatch{up, 6}
+			n++
+		}
+	}
+	d.log("old QuickEntity files upgraded: %d", n)
 	return nil
 }
 

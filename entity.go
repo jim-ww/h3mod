@@ -27,8 +27,22 @@ type entityJob struct {
 	temp, tblu uint64
 	baseTemp   *Resource // raw files from an earlier mod; nil means the game's
 	baseTblu   *Resource
-	qn         string   // entity.json to start from instead of binary files
-	patches    []string // entity.patch.json files
+	qn         string  // entity.json to start from instead of binary files
+	qnVersion  float64 // its quickEntityVersion
+	patches    []entityPatch
+}
+
+type entityPatch struct {
+	path    string
+	version float64 // patchVersion
+}
+
+// patchVersion is the patch's version; QuickEntity 1.136 wrote none.
+func (h *entityHeader) patchVersion() (float64, error) {
+	if h.PatchVersion == "" {
+		return 0, nil
+	}
+	return h.PatchVersion.Float64()
 }
 
 // entityHeader holds the fields h3mod needs from entity.json and
@@ -228,13 +242,13 @@ func (er *entityRunner) build(ctx context.Context, work string, j *entityJob, te
 	}
 	patched := filepath.Join(work, "patched.json")
 	for _, p := range j.patches {
-		abs, err := filepath.Abs(p)
+		abs, err := filepath.Abs(p.path)
 		if err != nil {
 			return err
 		}
 		if err := t.run(ctx, work, t.QuickEntity, "patch", "apply",
 			"--input", qn, "--patch", abs, "--output", patched, "--permissive", "--format-fix"); err != nil {
-			return fmt.Errorf("%s: %w", p, err)
+			return fmt.Errorf("%s: %w", p.path, err)
 		}
 		if err := os.Rename(patched, qn); err != nil {
 			return err
@@ -347,7 +361,7 @@ func (er *entityRunner) cacheKey(j *entityJob, temp, tblu *Resource) (string, er
 		}
 	}
 	for _, p := range j.patches {
-		b, err := os.ReadFile(p)
+		b, err := os.ReadFile(p.path)
 		if err != nil {
 			return "", err
 		}

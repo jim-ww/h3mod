@@ -354,21 +354,23 @@ func (p *Plan) addContentFile(m *Mod, chunk int, path string) error {
 		if err != nil {
 			return err
 		}
-		if h.PatchVersion.String() != "6" {
+		v, err := h.patchVersion()
+		if err != nil || v > 6 {
 			p.skip(m.Dir, "entity.patch.json patchVersion "+h.PatchVersion.String())
 			return nil
 		}
-		p.addEntityPatch(chunk, temp, tblu, path)
+		p.addEntityPatch(chunk, temp, tblu, entityPatch{path, v})
 	case strings.HasSuffix(lower, ".entity.json"):
 		h, temp, tblu, err := readEntityHeader(path)
 		if err != nil {
 			return err
 		}
-		if h.QuickEntityVersion.String() != "3.1" {
+		v, err := h.QuickEntityVersion.Float64()
+		if err != nil || v > 3.1 {
 			p.skip(m.Dir, "entity.json quickEntityVersion "+h.QuickEntityVersion.String())
 			return nil
 		}
-		j := &entityJob{chunk: chunk, temp: temp, tblu: tblu, qn: path}
+		j := &entityJob{chunk: chunk, temp: temp, tblu: tblu, qn: path, qnVersion: v}
 		p.removeEntity(temp)
 		p.entity[temp] = j
 		p.Entities = append(p.Entities, j)
@@ -482,7 +484,7 @@ func (p *Plan) removeEntity(temp uint64) {
 	}
 }
 
-func (p *Plan) addEntityPatch(chunk int, temp, tblu uint64, path string) {
+func (p *Plan) addEntityPatch(chunk int, temp, tblu uint64, patch entityPatch) {
 	j := p.entity[temp]
 	if j == nil {
 		j = &entityJob{chunk: chunk, temp: temp, tblu: tblu}
@@ -496,7 +498,7 @@ func (p *Plan) addEntityPatch(chunk int, temp, tblu uint64, path string) {
 		p.entity[temp] = j
 		p.Entities = append(p.Entities, j)
 	}
-	j.patches = append(j.patches, path)
+	j.patches = append(j.patches, patch)
 }
 
 // readRawFile reads a resource file with its rpkg-tool .meta (binary) or

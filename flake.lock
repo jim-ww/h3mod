@@ -45,6 +45,23 @@
         "type": "github"
       }
     },
+    "quickentity-rs-3": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1670242794,
+        "narHash": "sha256-AK+UmeV0gjhC9IR49LOgY7lyNwhpajo3uTuYAC7lRT8=",
+        "owner": "atampy25",
+        "repo": "quickentity-rs",
+        "rev": "30f394eed38ec6219232a524505ba565996c6326",
+        "type": "github"
+      },
+      "original": {
+        "owner": "atampy25",
+        "repo": "quickentity-rs",
+        "rev": "30f394eed38ec6219232a524505ba565996c6326",
+        "type": "github"
+      }
+    },
     "resourcetool-bin": {
       "flake": false,
       "locked": {
@@ -63,7 +80,26 @@
         "hash-list": "hash-list",
         "nixpkgs": "nixpkgs",
         "quickentity-rs": "quickentity-rs",
-        "resourcetool-bin": "resourcetool-bin"
+        "quickentity-rs-3": "quickentity-rs-3",
+        "resourcetool-bin": "resourcetool-bin",
+        "smf": "smf"
+      }
+    },
+    "smf": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1793703951,
+        "narHash": "sha256-wpHTxW/Q92yuutA+vzzeqToDDFLB44/rQ2GUOgw241M=",
+        "owner": "atampy25",
+        "repo": "simple-mod-framework",
+        "rev": "c6d7ae2cad3cfa8d35e22e9b16fda1558b564952",
+        "type": "github"
+      },
+      "original": {
+        "owner": "atampy25",
+        "repo": "simple-mod-framework",
+        "rev": "c6d7ae2cad3cfa8d35e22e9b16fda1558b564952",
+        "type": "github"
       }
     }
   },
