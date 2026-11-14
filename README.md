@@ -1,44 +1,71 @@
 # h3mod
 
-Deploys HITMAN 3 mods from a folder of unpacked mods. Reads SMF (Simple Mod
-Framework) mods and plain rpkg mods as they are.
+A blazing fast mod manager for HITMAN 3, written in Go. A command-line
+alternative to SMF (Simple Mod Framework) that installs and deploys the same
+mods: SMF framework mods and plain rpkg mods, as they are.
 
-## Running
+- **Fast.** Deploys only rebuild what changed; entities and textures are
+  built in parallel and cached.
+- **SMF compatible.** Content folders, options (checkbox, select,
+  conditional), load-order rules, every SMF content type, old QuickEntity
+  entities and patches, Peacock integration. `import-smf` takes over SMF's
+  load order and options.
+- **Mod manager.** Install from zip/7z/rar or `.rpkg`, check for updates with
+  release notes, enable, disable and reorder by number or part of a name. New
+  mod folders are enabled automatically; deleted ones drop out.
+- **Safe.** Base game archives are never written. Every file is replaced
+  atomically, so an interrupted deploy leaves the game as it was, and
+  `undeploy` restores vanilla.
+- Linux and Windows, no GUI, single binary with its tools next to it.
 
-### Non-Linux systems
+## Install
 
-`nix build .#bundle` makes `result/h3mod-linux-x64.tar.gz`: the h3mod
-binary with every tool and hash list it needs in `tools/` and `data/`. It
-runs on any x86_64 Linux with glibc 2.34+; on NixOS use the flake instead. Unpack it anywhere and, from a
-directory holding `h3mod.json`:
+### Prebuilt (Linux, Windows)
 
-    /path/to/h3mod-linux-x64/h3mod status
+Download `h3mod-<version>-linux-x64.tar.gz` or `h3mod-<version>-windows-x64.zip`
+from [releases](https://github.com/jim-ww/h3mod/releases) and unpack it into
+the HITMAN 3 folder. The archive has the binary plus the tools and hash lists
+it needs (`tools/`, `data/`). The Linux build needs glibc 2.34+; on NixOS use
+nix.
 
-A plain `go build` binary has none of these tools and only works where they
-are in PATH.
+### Nix (preferred)
 
-### With nix
+    nix run github:jim-ww/h3mod -- status
+    nix profile install github:jim-ww/h3mod
 
-The external tools (ResourceTool, quickentity-rs 3.1 and 3.0, xdelta3, 7-Zip),
-SMF's legacy QuickEntity scripts and the hash lists
-come from the flake:
+### Go
 
-    nix run . -- status            # packaged binary
-    nix develop -c go run . status # from source (or direnv with .envrc)
+    go install github.com/jim-ww/h3mod@latest
 
-Config is `h3mod.json` in the current directory (`-config` to change).
-Without one, h3mod uses the defaults below: run it from a folder inside the
-HITMAN 3 folder, next to `mods/`. Relative paths are relative to the config.
+The binary alone can deploy mods that only use plain Go features. Entities,
+`dlge.json`, `.delta` files and installing archives need these, in `tools/`
+and `data/` next to the binary, in PATH, or in the given variables:
 
-    {
-      "game": "..",               // HITMAN 3 folder
-      "mods": "mods",             // folder of unpacked mods, e.g. "../SMF/Mods"
-      "enabled": ["Mod A", ...],  // folder names, in load order; later wins
-      "options": {...},           // chosen options per mod
-      "skipIntro": false,         // the intro is skipped unless this is false
-      "deploySummary": "...",     // see Peacock below; "off" to disable
-      "known": [...]              // mod folders seen so far (managed by h3mod)
-    }
+| Needed for | Tools and data |
+|---|---|
+| `entity.json`, `entity.patch.json`, `rtlv.json` | ResourceTool, quickentity-rs (3.1, rev 010765c) |
+| entity patches | `hash_list.txt` (Hitman-Hashes v381, `H3MOD_PATH_LIST`) |
+| `dlge.json` | `hash_list.hmla` (Hitman-l10n-Hashes v102, `H3MOD_HASH_LIST`) |
+| QuickEntity 3.0 files | `quickentity-3` (quickentity-rs rev 30f394e) |
+| QuickEntity before 3.0 | SMF's QuickEntity scripts and npm packages (`H3MOD_LEGACY_QN`) |
+| `.delta` files | xdelta3 |
+| `install` from archives | 7-Zip (`7zz` or `7z`) |
+
+The easiest way to get them is `tools/` and `data/` from a release archive.
+
+## Usage
+
+From the folder the release was unpacked to (inside the HITMAN 3 folder):
+
+    ./h3mod install ~/Downloads/SomeMod.zip   # into mods/, enabled
+    ./h3mod                                   # status: mods, options, problems
+    ./h3mod options "Some Mod"                # list its options
+    ./h3mod option "Some Mod" "Color:Red"     # pick one
+    ./h3mod deploy                            # apply to the game
+    ./h3mod undeploy                          # back to vanilla
+
+On Windows run `.\h3mod.exe` the same way. Coming from SMF: set `"mods":
+"../SMF/Mods"` in `h3mod.json` and run `h3mod import-smf`.
 
 ## Commands
 
@@ -54,70 +81,80 @@ HITMAN 3 folder, next to `mods/`. Relative paths are relative to the config.
     import-smf [config.json]       take load order and options from SMF
     deploy [-skip-unsupported] [-skip-intro=false] [-out dir]
     undeploy
+    help, version
 
 `<mod>` is a number from `status`, a folder name, a mod ID, or any part of
-the name only one mod has; `enable all`/`disable all` work too. New folders in
-the mods directory are enabled automatically (at the end of the load order);
-deleted ones drop out of it. On a first run every mod is enabled.
+the name only one mod has. On a first run every mod is enabled.
 
 `install` takes what SMF's Mod Manager does: archives of framework mod
-folders, or `.rpkg` files (loose or archived) that become an rpkg mod named
-by `-name`. Archives are unpacked into a hidden folder in the mods
-directory, checked (manifests, content folders, no links) and moved into
-place. `update` installs into the mod's existing folder, keeping its place
-in the load order and its options.
+folders, or `.rpkg` files that become an rpkg mod named by `-name`. Archives
+are checked (manifests, content folders, no links) before they're moved into
+the mods folder. `update` installs into the mod's existing folder, keeping its
+place in the load order and its options.
 
 Before each deploy the load order is sorted by the mods' `loadBefore` and
-`loadAfter` rules, keeping the current order where the rules allow, and saved.
+`loadAfter` rules, keeping the current order where the rules allow. Option
+selections are saved with the mod version: when a mod updates, removed options
+are dropped, new ones get their defaults, and each change is reported.
 
-Option selections are saved with the mod version and the options the mod had.
-When a mod updates, removed options are dropped, new ones get their defaults,
-and empty choice groups fall back to theirs; each change is reported.
+## Config
+
+`h3mod.json` in the current directory (`-config` to change). Without one,
+these defaults apply; relative paths are relative to the config.
+
+    {
+      "game": "..",               // HITMAN 3 folder
+      "mods": "mods",             // folder of unpacked mods, e.g. "../SMF/Mods"
+      "enabled": ["Mod A", ...],  // folder names, in load order; later wins
+      "options": {...},           // chosen options per mod
+      "skipIntro": false,         // the intro is skipped unless this is false
+      "deploySummary": "...",     // see Peacock below; "off" to disable
+      "known": [...]              // mod folders seen so far (managed by h3mod)
+    }
 
 ## Supported
 
-- framework mods: content folders, checkbox and select options, conditional
-  options, requirements, incompatibilities, supported platforms and load
-  order rules
+- framework mods: content folders, checkbox, select and conditional options,
+  requirements, incompatibilities, supported platforms, load-order rules
 - raw files with `.meta` or `.meta.json`, rpkg mods
-- `entity.json` and `entity.patch.json` of any QuickEntity version: older
-  ones (before 3.1 / patch version 6) are upgraded into the cache like SMF
-  does, with SMF's JavaScript QuickEntity 1.136–2.1 (run by an embedded
-  JavaScript engine) and QuickEntity 3.0; mod files are never changed
-- `repository.json`, `material.json`,
-  `texture.tga`, `.delta`, `sfx.wem`
-- `unlockables.json`, `contract.json`, `JSON.patch.json`, blobs folders
+- `entity.json` and `entity.patch.json` of any QuickEntity version; older ones
+  are upgraded into the cache like SMF does, mod files are never changed
+- `repository.json`, `material.json`, `texture.tga`, `.delta`, `sfx.wem`
+- `unlockables.json`, `contract.json`, `JSON.patch.json`, blobs folders,
+  contracts in the Destinations menu
 - `dlge.json`, `locr.json`, `ditl.json`, `clng.json`, `rtlv.json`, manifest
   localisation and localised lines
 - manifest `dependencies`, `packagedefinition`, `thumbs`, and the standard
-  ModJPFiles script, including its files for `Retail/mods` (h3mod tracks
-  the files it places there and removes only those)
-- skipping the intro, on by default: `"skipIntro": false` in the config or
-  `deploy -skip-intro=false` keeps it
+  ModJPFiles script, including its `Retail/mods` files (h3mod removes only the
+  files it placed)
+- Peacock: modded unlockables and contracts, `peacockPlugins`
 
-- contracts added to the Destinations menu (`SMF.destinations`)
-- Peacock integration: modded unlockables and contracts, and `peacockPlugins`
-
-Anything else (mod scripts other than ModJPFiles) is reported by `status` and
-`deploy`.
+Other mod scripts are reported by `status` and `deploy`.
 
 ## Peacock
 
-Like SMF, a deploy writes a deploy summary that Peacock reads to serve modded
-unlockables and contracts and to run mods' plugins. By default it goes where
-Peacock on Linux looks: `$XDG_DATA_HOME/app.simple-mod-framework/deploySummary.json`.
-If Peacock runs under Wine, either set `"deploySummary"` to
-`<prefix>/drive_c/users/<user>/AppData/Local/Simple Mod Framework/deploySummary.json`,
-or point Peacock's `frameworkDeploySummaryPath` option at the file. h3mod
-only replaces or removes summaries it wrote itself; `undeploy` removes it.
+Like SMF, a deploy writes a summary that Peacock reads to serve modded
+unlockables and contracts and to run mods' plugins: in
+`%LOCALAPPDATA%\Simple Mod Framework\` on Windows and
+`$XDG_DATA_HOME/app.simple-mod-framework/` on Linux. If Peacock runs under
+Wine, set `"deploySummary"` to
+`<prefix>/drive_c/users/<user>/AppData/Local/Simple Mod Framework/deploySummary.json`
+or point Peacock's `frameworkDeploySummaryPath` at the file. h3mod only
+replaces or removes summaries it wrote itself.
 
-## Caches
+## Files
 
-`cache/` holds built entities, textures, deltas and RTLVs, keyed by their
-inputs;
-`state.json` records deployed archives so unchanged ones are not rewritten.
-Both can be deleted at any time. `clean/` keeps the vanilla
-packagedefinition and thumbs.dat and must be kept.
+`cache/` holds built entities, textures, deltas and RTLVs; `state.json` the
+deployed archives, so unchanged ones aren't rewritten. Both can be deleted at
+any time. `clean/` keeps the vanilla packagedefinition and thumbs.dat and
+must be kept.
+
+## Building
+
+    make build       # ./h3mod for this system
+    make test        # in the nix dev shell
+
+`nix develop` (or direnv) gives a shell with all tools for `go run .`.
 
 ## Support the project
 
