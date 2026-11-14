@@ -262,6 +262,36 @@ func confirm(question string) bool {
 	return answer == "y" || answer == "yes"
 }
 
+func sdkStatusCmd(cfg *Config) error {
+	st, err := readSDKStatus(cfg)
+	if err != nil {
+		return err
+	}
+	switch {
+	case !st.Installed:
+		fmt.Println("ZHMModSDK isn't installed (h3mod sdk install)")
+		return nil
+	case st.Ours:
+		fmt.Printf("ZHMModSDK %s, installed by h3mod", st.Version)
+	default:
+		fmt.Print("ZHMModSDK, installed by hand")
+	}
+	if st.Enabled {
+		fmt.Println(", on")
+	} else {
+		fmt.Println(", off (h3mod sdk enable)")
+	}
+	fmt.Println("mods:")
+	for _, m := range st.Mods {
+		mark := "[ ]"
+		if m.Enabled {
+			mark = "[x]"
+		}
+		fmt.Printf("  %s %s\n", mark, m.Name)
+	}
+	return nil
+}
+
 func installCmd(ctx context.Context, cfg *Config, src, rpkgName string, replace bool) error {
 	if rpkgName == "" {
 		rpkgName = strings.TrimSuffix(filepath.Base(src), filepath.Ext(src))

@@ -20,6 +20,7 @@ type State struct {
 	Mods      []string               `json:"mods,omitempty"`    // load order of the deploy
 	ModInfo   map[string]deployedMod `json:"modInfo,omitempty"` // by mod folder
 	SkipIntro bool                   `json:"skipIntro,omitempty"`
+	SDK       *sdkInstall            `json:"sdk,omitempty"`      // ZHMModSDK as h3mod installed it
 	Archives  map[string]Output      `json:"archives,omitempty"` // by file name in Runtime
 	Retail    map[string]string      `json:"retail,omitempty"`   // files placed in Retail/mods -> sha256
 }

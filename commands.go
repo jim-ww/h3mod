@@ -264,6 +264,83 @@ ones drop out of the load order.`,
 		RunE:  func(*cobra.Command, []string) error { return newDeployer(c.cfg).Undeploy() },
 	})
 
+	root.AddGroup(&cobra.Group{ID: "sdk", Title: "ZHMModSDK:"})
+	sdk := &cobra.Command{
+		Use:     "sdk",
+		Short:   "Show ZHMModSDK and its mods",
+		GroupID: "sdk",
+		Args:    cobra.NoArgs,
+		RunE:    func(*cobra.Command, []string) error { return sdkStatusCmd(c.cfg) },
+	}
+	completeSDKMods := func(_ *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+		cfg, err := loadConfig(c.cfgPath)
+		if err != nil || len(args) > 1 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		if len(args) == 1 {
+			return []cobra.Completion{"on", "off"}, cobra.ShellCompDirectiveNoFileComp
+		}
+		st, err := readSDKStatus(cfg)
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+		var out []cobra.Completion
+		for _, m := range st.Mods {
+			if hasPrefixFold(m.Name, toComplete) {
+				out = append(out, m.Name)
+			}
+		}
+		return out, cobra.ShellCompDirectiveNoFileComp
+	}
+	sdk.AddCommand(
+		&cobra.Command{
+			Use:   "install",
+			Short: "Install or update ZHMModSDK from its latest release",
+			Args:  cobra.NoArgs,
+			RunE: func(cmd *cobra.Command, _ []string) error {
+				v, err := installSDK(cmd.Context(), c.cfg, func(f string, a ...any) { fmt.Printf(f+"\n", a...) })
+				if err == nil {
+					fmt.Println("installed ZHMModSDK", v)
+				}
+				return err
+			},
+		},
+		&cobra.Command{
+			Use:   "uninstall",
+			Short: "Remove ZHMModSDK as h3mod installed it, restoring what it replaced",
+			Args:  cobra.NoArgs,
+			RunE: func(*cobra.Command, []string) error {
+				return uninstallSDK(c.cfg, func(f string, a ...any) { fmt.Printf(f+"\n", a...) })
+			},
+		},
+		&cobra.Command{
+			Use:   "enable",
+			Short: "Turn ZHMModSDK's loader on",
+			Args:  cobra.NoArgs,
+			RunE:  func(*cobra.Command, []string) error { return setSDKLoader(c.cfg, true) },
+		},
+		&cobra.Command{
+			Use:   "disable",
+			Short: "Turn ZHMModSDK's loader off, keeping it installed",
+			Args:  cobra.NoArgs,
+			RunE:  func(*cobra.Command, []string) error { return setSDKLoader(c.cfg, false) },
+		},
+		&cobra.Command{
+			Use:               "mod <name> [on|off]",
+			Short:             "Turn a ZHMModSDK mod on or off",
+			Args:              cobra.RangeArgs(1, 2),
+			ValidArgsFunction: completeSDKMods,
+			RunE: func(_ *cobra.Command, args []string) error {
+				on := len(args) == 1 || args[1] == "on"
+				if len(args) == 2 && args[1] != "on" && args[1] != "off" {
+					return fmt.Errorf("expected on or off, got %q", args[1])
+				}
+				return setSDKMod(c.cfg, args[0], on)
+			},
+		},
+	)
+	root.AddCommand(sdk)
+
 	root.AddCommand(&cobra.Command{
 		Use:   "version",
 		Short: "Print the version",

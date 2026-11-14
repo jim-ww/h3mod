@@ -583,9 +583,10 @@ func (d *Deployer) Undeploy() error {
 	}
 	left, err := syncRetail(filepath.Join(d.cfg.abs(d.cfg.Game), "Retail", "mods"), nil, state.Retail, d.log)
 	if err != nil {
-		return errors.Join(err, (&State{Retail: left}).save(d.statePath()))
+		return errors.Join(err, (&State{Retail: left, SDK: state.SDK}).save(d.statePath()))
 	}
-	if err := (&State{}).save(d.statePath()); err != nil {
+	// the game's files are vanilla again; ZHMModSDK isn't part of a deploy
+	if err := (&State{SDK: state.SDK}).save(d.statePath()); err != nil {
 		return err
 	}
 	d.log("game files restored to vanilla")
