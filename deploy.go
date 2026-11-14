@@ -45,14 +45,17 @@ func newDeployer(cfg *Config) *Deployer {
 
 func (d *Deployer) statePath() string { return d.cfg.abs("state.json") }
 
-func printSkipped(p *Plan) {
+// skippedLines describes what a plan leaves out, one line per mod.
+func skippedLines(p *Plan) []string {
+	var out []string
 	for _, m := range slices.Sorted(maps.Keys(p.Skipped)) {
 		var parts []string
 		for _, what := range slices.Sorted(maps.Keys(p.Skipped[m])) {
 			parts = append(parts, fmt.Sprintf("%s ×%d", what, p.Skipped[m][what]))
 		}
-		fmt.Printf("  %s: %s\n", m, strings.Join(parts, ", "))
+		out = append(out, fmt.Sprintf("  %s: %s", m, strings.Join(parts, ", ")))
 	}
+	return out
 }
 
 // Deploy builds and installs the enabled mods. With out set, output goes
@@ -81,8 +84,10 @@ func (d *Deployer) Deploy(ctx context.Context, skipUnsupported bool, out string)
 		d.log("note: %s", n)
 	}
 	if len(p.Skipped) > 0 {
-		fmt.Println("unsupported, not deployed:")
-		printSkipped(p)
+		d.log("unsupported, not deployed:")
+		for _, l := range skippedLines(p) {
+			d.log("%s", l)
+		}
 		if !skipUnsupported {
 			return errUnsupported
 		}

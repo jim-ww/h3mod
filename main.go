@@ -11,12 +11,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
-	"syscall"
 )
 
 const usage = `usage: h3mod [-config h3mod.json] [command] [args]
@@ -53,15 +51,6 @@ deleted ones drop out of the load order.
 
 // version is set at build time from VERSION.
 var version = "dev"
-
-func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	if err := run(ctx, os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
-	}
-}
 
 func run(ctx context.Context, args []string) error {
 	fl := flag.NewFlagSet("h3mod", flag.ContinueOnError)
@@ -175,7 +164,9 @@ func status(cfg *Config) error {
 	}
 	if len(p.Skipped) > 0 {
 		fmt.Println("unsupported in enabled mods:")
-		printSkipped(p)
+		for _, l := range skippedLines(p) {
+			fmt.Println(l)
+		}
 	}
 	return nil
 }
@@ -289,18 +280,8 @@ func updateCmd(ctx context.Context, cfg *Config, names []string) error {
 			fmt.Printf("%s: %s is the latest\n", m.Dir, m.Manifest.Version)
 			continue
 		}
-		work := cfg.abs(filepath.Join("cache", "work"))
-		if err := os.MkdirAll(work, 0o755); err != nil {
+		if err := installUpdate(ctx, cfg, m, u); err != nil {
 			return err
-		}
-		file, err := download(ctx, u.URL, work)
-		if err != nil {
-			return err
-		}
-		_, err = installMods(ctx, cfg, file, "", true, m.Dir, m.ID())
-		os.Remove(file)
-		if err != nil {
-			return fmt.Errorf("%s: %w", m.Dir, err)
 		}
 		fmt.Printf("%s: updated %s -> %s\n", m.Dir, m.Manifest.Version, u.Version)
 		printIndented(changelog(ctx, m, u))

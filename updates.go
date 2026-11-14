@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -130,6 +131,23 @@ func changelog(ctx context.Context, m *Mod, u modUpdate) string {
 		return notes
 	}
 	return strings.TrimSpace(u.Changelog)
+}
+
+// installUpdate downloads an update and installs it into the mod's folder.
+func installUpdate(ctx context.Context, cfg *Config, m *Mod, u modUpdate) error {
+	work := cfg.abs(filepath.Join("cache", "work"))
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		return err
+	}
+	file, err := download(ctx, u.URL, work)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(file)
+	if _, err := installMods(ctx, cfg, file, "", true, m.Dir, m.ID()); err != nil {
+		return fmt.Errorf("%s: %w", m.Dir, err)
+	}
+	return nil
 }
 
 // download saves url to a new file in dir.
