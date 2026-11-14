@@ -215,24 +215,30 @@ type modRow struct {
 	check  *widget.Check
 	name   *widget.Label
 	state  *widget.Label // deployed, not deployed yet, …
+	gear   *widget.Icon  // the mod has options
 	dragDY float32
 }
 
 func newModRow(g *gui) *modRow {
-	r := &modRow{g: g, check: widget.NewCheck("", nil), name: widget.NewLabel(""), state: widget.NewLabel("")}
+	r := &modRow{g: g, check: widget.NewCheck("", nil), name: widget.NewLabel(""), state: widget.NewLabel(""), gear: widget.NewIcon(theme.SettingsIcon())}
 	r.name.Truncation = fyne.TextTruncateEllipsis
 	r.ExtendBaseWidget(r)
 	return r
 }
 
 func (r *modRow) CreateRenderer() fyne.WidgetRenderer {
-	return widget.NewSimpleRenderer(container.NewBorder(nil, nil, r.check, r.state, r.name))
+	return widget.NewSimpleRenderer(container.NewBorder(nil, nil, r.check, container.NewHBox(r.gear, r.state), r.name))
 }
 
 func (r *modRow) set(id int) {
 	r.id = id
 	m := r.g.mods[id]
 	r.name.SetText(modLine(m))
+	if hasOptions(nil, m) {
+		r.gear.Show()
+	} else {
+		r.gear.Hide()
+	}
 	st := modDeployStatus(r.g.cfg, r.g.state, m)
 	r.state.SetText(strings.TrimSuffix(st, ", not deployed yet"))
 	switch st {
